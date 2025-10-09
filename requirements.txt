@@ -1,8 +1,6 @@
 streamlit>=1.28.0
 pandas>=1.5.0
-sqlite3
-openpyxl
-reportlab
-fpdf
+openpyxl>=3.1.0
+reportlab>=4.0.0
 validate-docbr>=3.4.1
 requests>=2.31.0
