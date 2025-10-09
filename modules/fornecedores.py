@@ -3,11 +3,9 @@ import sqlite3
 import base64
 import re
 import unicodedata
-from Formatacao import (
+from .formatacao import (
     formatar_cep,
     formatar_telefone,
-    formatar_cnpj,
-    validar_cnpj,
     buscar_endereco_por_cep
 )
 

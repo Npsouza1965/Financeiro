@@ -6,7 +6,14 @@ import warnings
 import pandas as pd
 from datetime import date
 
-from Formatacao import validar_cpf, formatar_cep, formatar_telefone, formatar_cpf, buscar_endereco_por_cep
+from .formatacao import (
+    validar_cpf,
+    formatar_cep,
+    formatar_telefone,
+    formatar_cpf,
+    buscar_endereco_por_cep,
+)
+
 
 DB_FILE = "financeiro.db"
 

@@ -107,6 +107,23 @@ def cadastrar_usuario(usuario, senha):
     finally:
         conn.close()
 
+def obter_role_usuario(usuario):
+    """Obtém o role (perfil) do usuário"""
+    conn = conectar_db()
+    if conn is None:
+        return "user"
+        
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT role FROM usuarios WHERE usuario = ?", (usuario,))
+        result = cursor.fetchone()
+        return result["role"] if result else "user"
+    except Exception as e:
+        print(f"❌ Erro ao obter role: {e}")
+        return "user"
+    finally:
+        conn.close()
+
 # ----------------------------
 # Tela de login
 # ----------------------------
@@ -150,6 +167,7 @@ def login_screen():
                     elif autenticar_usuario(usuario, senha):
                         st.session_state["authenticated"] = True
                         st.session_state["user"] = usuario
+                        st.session_state["role"] = obter_role_usuario(usuario)
                         st.success(f"✅ Bem-vindo, {usuario}!")
                         st.rerun()
                     else:
@@ -166,14 +184,15 @@ def login_screen():
                     elif new_senha != confirm_senha:
                         st.error("❌ As senhas não coincidem!")
                     else:
-                        cadastrar_usuario(new_username, new_senha)
+                        if cadastrar_usuario(new_username, new_senha):
+                            st.success("✅ Usuário cadastrado com sucesso! Faça login.")
 
             st.markdown("</div>", unsafe_allow_html=True)
 
 # ----------------------------
 # Gestão de usuários (para admin)
 # ----------------------------
-def cadastrar_usuario():
+def interface_cadastro_usuario():
     """Interface de cadastro de usuários (apenas admin)"""
     st.header("👥 Cadastro de Usuários")
     
@@ -186,6 +205,7 @@ def cadastrar_usuario():
         usuario = st.text_input("Novo usuário")
         senha = st.text_input("Senha", type="password")
         confirm_senha = st.text_input("Confirmar senha", type="password")
+        role = st.selectbox("Perfil", ["user", "admin"])
         
         if st.form_submit_button("Cadastrar Usuário"):
             if not usuario or not senha:
@@ -193,4 +213,65 @@ def cadastrar_usuario():
             elif senha != confirm_senha:
                 st.error("❌ As senhas não coincidem!")
             else:
-                cadastrar_usuario(usuario, senha)
+                if cadastrar_usuario_admin(usuario, senha, role):
+                    st.success(f"✅ Usuário {usuario} cadastrado com sucesso!")
+
+def cadastrar_usuario_admin(usuario, senha, role="user"):
+    """Cadastra usuário com role específico (apenas para admin)"""
+    senha_hash = hashlib.sha256(senha.encode()).hexdigest()
+    conn = conectar_db()
+    if conn is None:
+        return False
+        
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "INSERT INTO usuarios (usuario, senha, role) VALUES (?, ?, ?)", 
+            (usuario, senha_hash, role)
+        )
+        conn.commit()
+        return True
+    except sqlite3.IntegrityError:
+        st.error("❌ Usuário já existe!")
+        return False
+    except Exception as e:
+        st.error(f"❌ Erro ao cadastrar: {e}")
+        return False
+    finally:
+        conn.close()
+
+def listar_usuarios():
+    """Lista todos os usuários (apenas admin)"""
+    if st.session_state.get("user") != "admin":
+        return []
+        
+    conn = conectar_db()
+    if conn is None:
+        return []
+        
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT id, usuario, role FROM usuarios ORDER BY usuario")
+        return cursor.fetchall()
+    except Exception as e:
+        print(f"❌ Erro ao listar usuários: {e}")
+        return []
+    finally:
+        conn.close()
+
+# ----------------------------
+# Função principal de cadastro (para uso no menu)
+# ----------------------------
+def cadastrar_usuario():
+    """Função principal para cadastro de usuários no menu"""
+    interface_cadastro_usuario()
+    
+    # Mostrar lista de usuários se for admin
+    if st.session_state.get("user") == "admin":
+        st.subheader("📋 Usuários Cadastrados")
+        usuarios = listar_usuarios()
+        if usuarios:
+            for user in usuarios:
+                st.write(f"👤 **{user['usuario']}** - Perfil: {user['role']}")
+        else:
+            st.info("ℹ️ Nenhum usuário cadastrado.")
