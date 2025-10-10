@@ -443,7 +443,7 @@ def exibir_clientes():
             salvar_cliente_sql(cliente_dados)
             st.success("✅ Cliente inserido com sucesso!")
             st.session_state.clientes_limpar = True
-            st.rerun()
+            st.esperimental_rerum()
 
     # --- Alteração ---
     if btn_alterar:
@@ -455,7 +455,7 @@ def exibir_clientes():
                 salvar_cliente_sql(cliente_dados)
                 st.success("✅ Cliente alterado com sucesso!")
                 st.session_state.clientes_limpar = True
-                st.rerun()
+                st.esperimental_rerum()
         else:
             st.warning("⚠️ Selecione um cliente para alterar.")
 
@@ -465,7 +465,7 @@ def exibir_clientes():
             excluir_cliente_sql(cliente_selecionado["id"])
             st.success("✅ Cliente excluído com sucesso!")
             st.session_state.clientes_limpar = True
-            st.rerun()
+            st.esperimental_rerum()
         else:
             st.warning("⚠️ Selecione um cliente para excluir.")
 
@@ -473,12 +473,12 @@ def exibir_clientes():
     if btn_limpar:
         st.session_state.clientes_limpar = True
         st.success("🔄 Formulário limpo!")
-        st.rerun()
+        st.esperimental_rerum()
 
     # CORREÇÃO: Limpar campos após ação (usando callback seguro)
     if st.session_state.clientes_limpar:
         limpar_campos_clientes()
-        st.rerun()
+        st.esperimental_rerun()
 
     # Exibir validação do CPF
     if cpf and not validar_cpf(cpf):

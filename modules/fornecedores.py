@@ -6,7 +6,9 @@ import unicodedata
 from .formatacao import (
     formatar_cep,
     formatar_telefone,
-    buscar_endereco_por_cep
+    buscar_endereco_por_cep,
+    validar_cnpj,
+    formatar_cnpj
 )
 
 DB_FILE = "financeiro.db"
@@ -197,7 +199,7 @@ def exibir_fornecedores():
             if cnpj_raw != st.session_state.cnpj_raw:
                 st.session_state.cnpj_raw = cnpj_raw
                 st.session_state.cnpj_formatado = aplicar_formatacao_cnpj(cnpj_raw)
-                st.rerun()
+                st.esperimental_rerun()
             
             # Validação do CNPJ
             cnpj_limpo = re.sub(r'\D', '', st.session_state.get("cnpj_formatado", ""))
@@ -233,7 +235,7 @@ def exibir_fornecedores():
                 st.session_state.cnpj_formatado = formatar_cnpj(fornecedor_existente["cnpj"] or "")
                 st.session_state.cep_raw = fornecedor_existente["cep"] or ""
                 st.session_state.telefone_raw = fornecedor_existente["telefone"] or ""
-                st.rerun()
+                st.esperimental_rerun()
 
     # Container para CEP (FORA do formulário)
     with st.container():
@@ -252,7 +254,7 @@ def exibir_fornecedores():
             if cep_raw != st.session_state.cep_raw:
                 st.session_state.cep_raw = cep_raw
                 st.session_state.cep_formatado = aplicar_formatacao_cep(cep_raw)
-                st.rerun()
+                st.esperimental_rerun()
         
         with col2:
             if st.button("📌 Buscar CEP", key="buscar_cep_btn"):
@@ -265,7 +267,7 @@ def exibir_fornecedores():
                         st.session_state["form_cidade"] = dados_endereco.get("Cidade", "")
                         st.session_state["form_uf"] = dados_endereco.get("UF", "")
                         st.success("✅ Endereço preenchido automaticamente!")
-                        st.rerun()
+                        st.esperimental_rerun()
                     else:
                         st.warning("CEP não encontrado.")
                 else:
@@ -365,7 +367,7 @@ def exibir_fornecedores():
             st.session_state.cnpj_formatado = ""
             st.session_state.cep_formatado = ""
             st.session_state.telefone_formatado = ""
-            st.rerun()
+            st.esperimental_rerun()
 
         elif inserir:
             # Validar campos obrigatórios
@@ -384,7 +386,7 @@ def exibir_fornecedores():
                 st.session_state.cnpj_formatado = ""
                 st.session_state.cep_formatado = ""
                 st.session_state.telefone_formatado = ""
-                st.rerun()
+                st.esperimental_rerun()
 
         elif alterar and fornecedor_selecionado:
             if not cnpj or not nome:
@@ -402,7 +404,7 @@ def exibir_fornecedores():
                 st.session_state.cnpj_formatado = ""
                 st.session_state.cep_formatado = ""
                 st.session_state.telefone_formatado = ""
-                st.rerun()
+                st.esperimental_rerun()
 
         elif excluir and fornecedor_selecionado:
             excluir_fornecedor(fornecedor_selecionado["id"])
@@ -415,7 +417,7 @@ def exibir_fornecedores():
             st.session_state.cnpj_formatado = ""
             st.session_state.cep_formatado = ""
             st.session_state.telefone_formatado = ""
-            st.rerun()
+            st.esperimental_rerun()
 
 if __name__ == "__main__":
     exibir_fornecedores()

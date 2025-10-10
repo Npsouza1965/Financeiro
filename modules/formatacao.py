@@ -112,7 +112,63 @@ def formatar_telefone(telefone: str) -> str:
     elif len(telefone) == 10:
         return f"({telefone[:2]}) {telefone[2:6]}-{telefone[6:]}"
     return telefone
+# ==========================================================
+# CNPJ
+# ==========================================================
 
+def validar_cnpj(cnpj: str) -> bool:
+    """
+    Valida um CNPJ com ou sem formatação.
+    Retorna True se o CNPJ for válido.
+    """
+    if not cnpj:
+        return False
+
+    # Remove tudo que não for número
+    cnpj = re.sub(r'\D', '', cnpj)
+
+    # CNPJ deve ter 14 dígitos
+    if len(cnpj) != 14:
+        return False
+
+    # Descarta CNPJs com todos os dígitos iguais
+    if cnpj == cnpj[0] * 14:
+        return False
+
+    # Cálculo do primeiro dígito verificador
+    pesos1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+    soma = sum(int(cnpj[i]) * pesos1[i] for i in range(12))
+    resto = soma % 11
+    digito1 = 0 if resto < 2 else 11 - resto
+
+    # Cálculo do segundo dígito verificador
+    pesos2 = [6] + pesos1
+    soma = sum(int(cnpj[i]) * pesos2[i] for i in range(13))
+    resto = soma % 11
+    digito2 = 0 if resto < 2 else 11 - resto
+
+    return cnpj[-2:] == f"{digito1}{digito2}"
+
+
+def formatar_cnpj(cnpj: str) -> str:
+    """
+    Formata o CNPJ no padrão 00.000.000/0000-00
+    """
+    if not cnpj:
+        return ""
+    cnpj = re.sub(r'\D', '', cnpj)
+    if len(cnpj) == 14:
+        return f"{cnpj[:2]}.{cnpj[2:5]}.{cnpj[5:8]}/{cnpj[8:12]}-{cnpj[12:]}"
+    return cnpj
+
+
+# =====================
+# Teste rápido
+# =====================
+if __name__ == "__main__":
+    cnpjs = ["12.345.678/0001-95", "11222333000181", "00.000.000/0000-00"]
+    for c in cnpjs:
+        print(f"CNPJ: {c} | Válido? {validar_cnpj(c)} | Formatado: {formatar_cnpj(c)}")
 
 # ==========================================================
 # TESTE LOCAL (opcional)
