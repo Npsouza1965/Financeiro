@@ -3,7 +3,8 @@ import sqlite3
 import base64
 import os
 
-DB_FILE = "nps_financeiro.db"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_FILE = os.path.join(BASE_DIR, "nps_financeiro.db")
 
 
 def set_login_background_planos(filename="tela_fundo_azul.png"):

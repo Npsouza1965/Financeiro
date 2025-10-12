@@ -2,8 +2,10 @@
 import streamlit as st
 import sqlite3
 import hashlib
+import os
 
-DB_FILE = "nps_financeiro.db"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_FILE = os.path.join(BASE_DIR, "nps_financeiro.db")
 
 # ----------------------------
 # Funções de banco de dados

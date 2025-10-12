@@ -3,8 +3,10 @@ import sqlite3
 from datetime import datetime, date
 import requests
 import re
+import os
 
-DB_FILE = "nps_financeiro.db"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_FILE = os.path.join(BASE_DIR, "nps_financeiro.db")
 
 # ----------------------------
 # Banco de dados
