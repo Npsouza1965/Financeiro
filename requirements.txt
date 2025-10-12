@@ -2,4 +2,4 @@ streamlit==1.50.0
 pandas==2.2.3
 openpyxl==3.1.5
 reportlab==4.4.4
-sqlite3
+validate-docbr==1.11.1  # se realmente necessário

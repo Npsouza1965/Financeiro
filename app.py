@@ -4,8 +4,13 @@ import warnings
 import base64
 import streamlit as st
 
-# ✅ CONFIGURAÇÃO ANTECIPADA PARA EVITAR ERROS
-st.set_page_config(page_title="Financeiro", page_icon="📊", layout="wide")
+# ✅ CONFIGURAÇÃO ANTECIPADA CRÍTICA
+st.set_page_config(
+    page_title="Sistema Financeiro NPS",
+    page_icon="📊", 
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
 # Garante que os submódulos sejam encontrados
 base_path = os.path.dirname(__file__)
@@ -14,7 +19,8 @@ if base_path not in sys.path:
 
 warnings.filterwarnings("ignore", category=UserWarning, module="streamlit")
 
-# ✅ IMPORT COM TRATAMENTO DE ERRO
+# ✅ IMPORT COM TRATAMENTO DE ERRO ROBUSTO
+MODULES_LOADED = False
 try:
     from modulos import financeiro
     from modulos import planos
@@ -47,23 +53,45 @@ try:
 except Exception as e:
     print(f"Erro ao abrir log: {e}")
 
-def safe_session_clear():
-    """Limpeza segura da sessão para evitar erro removeChild"""
-    keys_to_keep = ['_streamlit_version', '_runtime', 'FormSubmitter:login_screen-']
-    new_state = {}
+# ✅ SISTEMA DE SESSÃO SEGURA CONTRA removeChild
+def initialize_safe_session():
+    """Inicialização segura da sessão"""
+    required_keys = {
+        'authenticated': False,
+        'user': None,
+        'user_role': 'user',
+        'session_initialized': True,
+        'SafeState': 'active'
+    }
     
-    for key in keys_to_keep:
-        if key in st.session_state:
-            new_state[key] = st.session_state[key]
-    
-    # Limpa apenas as chaves problemáticas
-    for key in list(st.session_state.keys()):
-        if key not in keys_to_keep:
-            try:
-                del st.session_state[key]
-            except:
-                pass
+    for key, default_value in required_keys.items():
+        if key not in st.session_state:
+            st.session_state[key] = default_value
 
+def safe_session_clear():
+    """Limpeza segura que evita o erro removeChild"""
+    # Mantém apenas as chaves essenciais do Streamlit
+    safe_keys = {
+        '_streamlit_version', '_runtime', 'Init', 
+        'session_initialized', 'SafeState', 'FormSubmitter:login_screen-'
+    }
+    
+    # Remove apenas chaves problemáticas de forma segura
+    keys_to_remove = []
+    for key in list(st.session_state.keys()):
+        if key not in safe_keys:
+            keys_to_remove.append(key)
+    
+    for key in keys_to_remove:
+        try:
+            del st.session_state[key]
+        except Exception:
+            pass  # Ignora erros na remoção
+    
+    # Re-inicializa estado seguro
+    initialize_safe_session()
+
+# ✅ BACKGROUNDS SEGUROS (MANTIDOS OS PNGs)
 def set_login_background(filename="Fundo.png"):
     """Background para tela de login com fallback"""
     try:
@@ -167,6 +195,27 @@ def set_app_background(background_file="tela_fundo_azul.png"):
         </style>
         """, unsafe_allow_html=True)
 
+# ✅ COMPONENTES SEGUROS COM KEYS ÚNICAS
+def safe_radio(label, options, key_suffix):
+    """Radio button seguro com key única e estável"""
+    import hashlib
+    key_hash = hashlib.md5(f"{label}_{str(options)}".encode()).hexdigest()[:8]
+    return st.sidebar.radio(
+        label,
+        options,
+        key=f"safe_radio_{key_suffix}_{key_hash}"
+    )
+
+def safe_button(label, key_suffix, **kwargs):
+    """Botão seguro com key única e estável"""
+    import hashlib
+    key_hash = hashlib.md5(f"{label}_{key_suffix}".encode()).hexdigest()[:8]
+    return st.button(
+        label,
+        key=f"safe_btn_{key_suffix}_{key_hash}",
+        **kwargs
+    )
+
 def safe_login_screen():
     """Tela de login com tratamento de erro"""
     try:
@@ -174,11 +223,11 @@ def safe_login_screen():
             usuarios.login_screen()
         else:
             st.error("⚠️ Módulos não carregados. Recarregue a página.")
-            if st.button("🔄 Recarregar"):
+            if safe_button("🔄 Recarregar", "login_reload"):
                 st.rerun()
     except Exception as e:
         st.error(f"❌ Erro no login: {e}")
-        if st.button("🔄 Tentar Novamente"):
+        if safe_button("🔄 Tentar Novamente", "login_retry"):
             st.rerun()
 
 def safe_module_execution(module_function, module_name):
@@ -191,58 +240,59 @@ def safe_module_execution(module_function, module_name):
     except Exception as e:
         st.error(f"❌ Erro no módulo {module_name}: {e}")
         
-        # Botões de recuperação
+        # Botões de recuperação com keys seguras
         col1, col2 = st.columns(2)
         with col1:
-            if st.button(f"🔄 Recarregar {module_name}", key=f"reload_{module_name}"):
+            if safe_button(f"🔄 Recarregar {module_name}", f"reload_{module_name}"):
                 st.rerun()
         with col2:
-            if st.button("🏠 Voltar ao Menu", key=f"menu_{module_name}"):
-                # Limpa apenas o estado problemático
-                if "authenticated" in st.session_state:
-                    st.session_state.authenticated = True
+            if safe_button("🏠 Voltar ao Menu", f"menu_{module_name}"):
+                safe_session_clear()
+                st.session_state.authenticated = True
                 st.rerun()
 
 def main_app():
     # ✅ INICIALIZAÇÃO SEGURA DA SESSÃO
-    if "authenticated" not in st.session_state:
-        st.session_state["authenticated"] = False
-    if "user" not in st.session_state:
-        st.session_state["user"] = None
-    if "menu_initialized" not in st.session_state:
-        st.session_state["menu_initialized"] = False
+    initialize_safe_session()
 
     # Tela de login
-    if not st.session_state["authenticated"]:
+    if not st.session_state.authenticated:
         set_login_background()
         safe_login_screen()
         return
 
-    # ✅ SIDEBAR COM TRATAMENTO DE ERRO
+    # ✅ SIDEBAR COM TRATAMENTO DE ERRO ROBUSTO
     try:
-        st.sidebar.title(f"📌 Menu - Usuário: {st.session_state['user']}")
-        
-        # Botão de recuperação na sidebar
-        if st.sidebar.button("🔄 Recarregar Seguro", help="Recarrega sem erros"):
-            safe_session_clear()
-            st.rerun()
-        
-        st.sidebar.markdown("---")
-        
-        menu = st.sidebar.radio(
-            "Navegação",
-            ["Financeiro", "Relacionamento", "Planos",
-             "Relatórios", "Cadastro de Usuário", "Sair"],
-            key="main_menu_radio"  # ✅ KEY ÚNICA
-        )
-        
+        with st.sidebar:
+            st.markdown(f"""
+            <div style='background-color: #2c3e50; padding: 20px; border-radius: 10px; margin-bottom: 20px;'>
+                <h3 style='color: white; margin: 0;'>📊 Sistema Financeiro</h3>
+                <p style='color: #ecf0f1; margin: 5px 0 0 0; font-size: 14px;'>
+                    Usuário: <strong>{st.session_state.get('user', 'N/A')}</strong>
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            st.markdown("---")
+            
+            # Menu principal com keys seguras
+            menu_options = ["Financeiro", "Relacionamento", "Planos", "Relatórios", "Cadastro de Usuário", "Sair"]
+            menu = safe_radio("Navegação", menu_options, "main_navigation")
+            
+            st.markdown("---")
+            
+            # Botão de recuperação seguro
+            if safe_button("🔄 Recarregar Seguro", "safe_reload", help="Recarrega sem erros"):
+                safe_session_clear()
+                st.rerun()
+                
     except Exception as e:
         st.sidebar.error("❌ Erro na sidebar")
-        if st.sidebar.button("🔄 Recarregar Sidebar"):
+        if safe_button("🔄 Recarregar Sidebar", "sidebar_reload"):
             st.rerun()
         menu = "Financeiro"  # Fallback seguro
 
-    # ✅ NAVEGAÇÃO SEGURA
+    # ✅ NAVEGAÇÃO SEGURA COM PROTECÇÃO COMPLETA
     try:
         if menu == "Financeiro":
             set_app_background("tela_fundo_azul.png")
@@ -261,11 +311,8 @@ def main_app():
             
             # ✅ SUBMENU SEGURO
             try:
-                sub_relatorio = st.sidebar.radio(
-                    "📊 Relatórios disponíveis",
-                    ["Relatório Analítico", "Relatório Sintético"],
-                    key="submenu_relatorios"
-                )
+                sub_options = ["Relatório Analítico", "Relatório Sintético"]
+                sub_relatorio = safe_radio("📊 Relatórios disponíveis", sub_options, "sub_reports")
                 
                 if sub_relatorio == "Relatório Analítico":
                     safe_module_execution(relatorio.rel_analitico, "Relatório Analítico")
@@ -274,11 +321,11 @@ def main_app():
                     
             except Exception as e:
                 st.error(f"❌ Erro no submenu de relatórios: {e}")
-                if st.button("🔄 Recarregar Relatórios"):
+                if safe_button("🔄 Recarregar Relatórios", "reload_reports"):
                     st.rerun()
             
         elif menu == "Cadastro de Usuário":
-            set_app_background()
+            set_app_background("tela_fundo_azul.png")
             safe_module_execution(usuarios.cadastrar_usuario, "Cadastro de Usuário")
             
         elif menu == "Sair":
@@ -290,17 +337,17 @@ def main_app():
                 
                 col_btn1, col_btn2 = st.columns(2)
                 with col_btn1:
-                    if st.button("✅ Sim, sair", use_container_width=True, type="primary"):
+                    if safe_button("✅ Sim, sair", "confirm_logout", type="primary", use_container_width=True):
                         safe_session_clear()
                         st.success("✅ Logout realizado com sucesso!")
                         st.rerun()
                 
                 with col_btn2:
-                    if st.button("❌ Cancelar", use_container_width=True):
+                    if safe_button("❌ Cancelar", "cancel_logout", use_container_width=True):
                         st.rerun()
     
     except Exception as e:
-        # ✅ TRATAMENTO GLOBAL DE ERROS
+        # ✅ TRATAMENTO GLOBAL DE ERROS ROBUSTO
         st.error(f"❌ Erro inesperado: {str(e)}")
         
         st.markdown("""
@@ -312,19 +359,19 @@ def main_app():
         
         col1, col2, col3 = st.columns(3)
         with col1:
-            if st.button("🔄 Recarregar Página", use_container_width=True):
+            if safe_button("🔄 Recarregar Página", "soft_reload", use_container_width=True):
                 st.rerun()
         with col2:
-            if st.button("🗑️ Limpar Sessão", use_container_width=True):
+            if safe_button("🗑️ Limpar Sessão", "clear_session", use_container_width=True):
                 safe_session_clear()
                 st.rerun()
         with col3:
-            if st.button("🏠 Voltar ao Login", use_container_width=True):
+            if safe_button("🏠 Voltar ao Login", "back_to_login", use_container_width=True):
                 safe_session_clear()
                 st.session_state.authenticated = False
                 st.rerun()
 
-# ✅ EXECUÇÃO PRINCIPAL COM PROTEÇÃO
+# ✅ EXECUÇÃO PRINCIPAL COM PROTEÇÃO MÁXIMA
 if __name__ == "__main__":
     try:
         main_app()
@@ -339,5 +386,5 @@ if __name__ == "__main__":
         </div>
         """, unsafe_allow_html=True)
         
-        if st.button("🔄 Tentar Novamente", type="primary"):
+        if safe_button("🔄 Tentar Novamente", "emergency_retry", type="primary"):
             st.rerun()
