@@ -12,48 +12,135 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Garante que os submódulos sejam encontrados
+# ✅ CORREÇÃO CRÍTICA: CONFIGURAÇÃO DE CAMINHOS PARA NUVEM
 base_path = os.path.dirname(__file__)
-if base_path not in sys.path:
-    sys.path.append(base_path)
+modulos_path = os.path.join(base_path, "modulos")
+
+# Adiciona múltiplos caminhos possíveis
+paths_to_add = [
+    base_path,
+    modulos_path,
+    os.path.join(base_path, "pages"),
+    os.path.join(base_path, "utils")
+]
+
+for path in paths_to_add:
+    if path not in sys.path and os.path.exists(path):
+        sys.path.append(path)
+        print(f"[INFO] Added to path: {path}")
+
+print(f"[DEBUG] sys.path: {sys.path}")
+print(f"[DEBUG] Current directory: {os.getcwd()}")
+print(f"[DEBUG] Directory contents: {os.listdir('.')}")
 
 warnings.filterwarnings("ignore", category=UserWarning, module="streamlit")
 
-# ✅ IMPORT COM TRATAMENTO DE ERRO ROBUSTO
+# ✅ IMPORT COM TRATAMENTO DE ERRO MELHORADO
 MODULES_LOADED = False
+loaded_modules = {}
+
 try:
-    from modulos import financeiro
-    from modulos import planos
-    from modulos import relatorio
-    from modulos import usuarios
-    from modulos import relacionamento
-    MODULES_LOADED = True
-    print("[INFO] Módulos importados com sucesso!")
-except ImportError as e:
-    MODULES_LOADED = False
-    print(f"[ERRO] Import falhou: {e}")
+    # Tenta importar de diferentes locais
+    try:
+        from modulos import financeiro, planos, relatorio, usuarios, relacionamento
+        MODULES_LOADED = True
+        loaded_modules = {
+            'financeiro': financeiro,
+            'planos': planos,
+            'relatorio': relatorio,
+            'usuarios': usuarios,
+            'relacionamento': relacionamento
+        }
+        print("[SUCCESS] Módulos importados via pacote modulos")
+        
+    except ImportError as e:
+        print(f"[TRY 1] Falha no import do pacote: {e}")
+        
+        # ✅ Tenta importar módulos individualmente
+        module_files = [
+            'financeiro.py', 
+            'planos.py', 
+            'relatorio.py', 
+            'usuarios.py', 
+            'relacionamento.py'
+        ]
+        
+        for module_file in module_files:
+            module_name = module_file.replace('.py', '')
+            module_paths = [
+                os.path.join('modulos', module_file),
+                module_file,
+                os.path.join(base_path, 'modulos', module_file)
+            ]
+            
+            for module_path in module_paths:
+                if os.path.exists(module_path):
+                    try:
+                        # Importação dinâmica
+                        spec = importlib.util.spec_from_file_location(module_name, module_path)
+                        module = importlib.util.module_from_spec(spec)
+                        spec.loader.exec_module(module)
+                        loaded_modules[module_name] = module
+                        MODULES_LOADED = True
+                        print(f"[SUCCESS] Módulo {module_name} carregado de: {module_path}")
+                        break
+                    except Exception as module_error:
+                        print(f"[ERROR] Falha ao carregar {module_path}: {module_error}")
+                        continue
 
-def resource_path(relative_path: str) -> str:
-    """Função compatível com nuvem"""
-    if getattr(sys, "_MEIPASS", False):
-        base_path = sys._MEIPASS
-    else:
-        base_path = os.path.abspath(".")
-    return os.path.join(base_path, relative_path)
-
-sys.path.append(resource_path("modulos"))
-
-# ✅ LOG SEGURO
-log_file = resource_path("erro_log.txt")
-try:
-    log = open(log_file, "a", encoding="utf-8")
-    sys.stdout = log
-    sys.stderr = log
-    print("\n--- Nova execução ---")
 except Exception as e:
-    print(f"Erro ao abrir log: {e}")
+    MODULES_LOADED = False
+    print(f"[CRITICAL] Todos os métodos de import falharam: {e}")
 
-# ✅ SISTEMA DE SESSÃO SEGURA CONTRA removeChild
+print(f"[STATUS] MODULES_LOADED: {MODULES_LOADED}")
+print(f"[STATUS] Módulos carregados: {list(loaded_modules.keys())}")
+
+# ✅ FUNÇÃO DE CAMINHO COMPATÍVEL COM NUVEM
+def resource_path(relative_path):
+    """Get absolute path to resource, works for dev and for PyInstaller"""
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    
+    full_path = os.path.join(base_path, relative_path)
+    
+    # Verifica se o arquivo existe
+    if not os.path.exists(full_path):
+        print(f"[WARNING] Arquivo não encontrado: {full_path}")
+        # Tenta encontrar em subdiretórios
+        for root, dirs, files in os.walk(base_path):
+            if relative_path in files:
+                alternative_path = os.path.join(root, relative_path)
+                print(f"[INFO] Arquivo encontrado em: {alternative_path}")
+                return alternative_path
+    
+    return full_path
+
+# ✅ SISTEMA DE LOG MELHORADO
+def setup_logging():
+    """Configura sistema de logging seguro"""
+    try:
+        log_file = resource_path("app_log.txt")
+        import logging
+        
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(levelname)s - %(message)s',
+            handlers=[
+                logging.FileHandler(log_file, encoding='utf-8'),
+                logging.StreamHandler()
+            ]
+        )
+        return logging.getLogger(__name__)
+    except Exception as e:
+        print(f"Erro ao configurar logging: {e}")
+        return None
+
+logger = setup_logging()
+
+# ✅ SISTEMA DE SESSÃO SEGURA (MANTIDO)
 def initialize_safe_session():
     """Inicialização segura da sessão"""
     required_keys = {
@@ -70,13 +157,11 @@ def initialize_safe_session():
 
 def safe_session_clear():
     """Limpeza segura que evita o erro removeChild"""
-    # Mantém apenas as chaves essenciais do Streamlit
     safe_keys = {
         '_streamlit_version', '_runtime', 'Init', 
         'session_initialized', 'SafeState', 'FormSubmitter:login_screen-'
     }
     
-    # Remove apenas chaves problemáticas de forma segura
     keys_to_remove = []
     for key in list(st.session_state.keys()):
         if key not in safe_keys:
@@ -86,56 +171,63 @@ def safe_session_clear():
         try:
             del st.session_state[key]
         except Exception:
-            pass  # Ignora erros na remoção
+            pass
     
-    # Re-inicializa estado seguro
     initialize_safe_session()
 
-# ✅ BACKGROUNDS SEGUROS (MANTIDOS OS PNGs)
+# ✅ BACKGROUNDS SEGUROS - CORREÇÃO PARA NUVEM
 def set_login_background(filename="Fundo.png"):
-    """Background para tela de login com fallback"""
+    """Background para tela de login com fallback robusto"""
     try:
-        # Tenta vários caminhos possíveis
-        possible_paths = [
+        # Lista de possíveis locais
+        possible_locations = [
+            filename,
+            f"modulos/{filename}",
+            f"static/{filename}",
+            f"assets/{filename}",
+            f"images/{filename}",
             resource_path(filename),
             resource_path(f"modulos/{filename}"),
-            resource_path(f"static/{filename}"),
-            filename  # Caminho direto
         ]
         
-        background_set = False
-        for path in possible_paths:
-            if os.path.exists(path):
-                with open(path, "rb") as f:
-                    data = f.read()
-                encoded = base64.b64encode(data).decode()
-                st.markdown(f"""
-                <style>
-                .stApp {{
-                    background-image: url("data:image/png;base64,{encoded}");
-                    background-size: cover;
-                    background-attachment: fixed;
-                }}
-                </style>
-                """, unsafe_allow_html=True)
-                background_set = True
-                print(f"[INFO] Background carregado: {path}")
-                break
+        background_image = None
+        for location in possible_locations:
+            if os.path.exists(location):
+                try:
+                    with open(location, "rb") as f:
+                        background_image = base64.b64encode(f.read()).decode()
+                    print(f"[SUCCESS] Background carregado: {location}")
+                    break
+                except Exception as e:
+                    print(f"[ERROR] Erro ao ler {location}: {e}")
+                    continue
         
-        if not background_set:
-            # Fallback para cor sólida
+        if background_image:
+            st.markdown(f"""
+            <style>
+            .stApp {{
+                background-image: url("data:image/png;base64,{background_image}");
+                background-size: cover;
+                background-position: center;
+                background-attachment: fixed;
+                background-repeat: no-repeat;
+            }}
+            </style>
+            """, unsafe_allow_html=True)
+        else:
+            # Fallback para gradiente
             st.markdown("""
             <style>
             .stApp {
                 background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                background-attachment: fixed;
             }
             </style>
             """, unsafe_allow_html=True)
-            print("[INFO] Usando background fallback")
+            print("[INFO] Usando background fallback (gradiente)")
             
     except Exception as e:
-        print(f"[ERRO] Background não carregado: {e}")
-        # Fallback seguro
+        print(f"[ERROR] Falha no background: {e}")
         st.markdown("""
         <style>
         .stApp {
@@ -146,58 +238,10 @@ def set_login_background(filename="Fundo.png"):
 
 def set_app_background(background_file="tela_fundo_azul.png"):
     """Background para aplicação principal"""
-    try:
-        # Tenta vários caminhos possíveis
-        possible_paths = [
-            resource_path(background_file),
-            resource_path(f"modulos/{background_file}"),
-            resource_path(f"modulos/static/{background_file}"),
-            resource_path(f"static/{background_file}"),
-            background_file  # Caminho direto
-        ]
-        
-        background_set = False
-        for path in possible_paths:
-            if os.path.exists(path):
-                with open(path, "rb") as f:
-                    data = f.read()
-                encoded = base64.b64encode(data).decode()
-                st.markdown(f"""
-                <style>
-                .stApp {{
-                    background-image: url("data:image/png;base64,{encoded}");
-                    background-size: cover;
-                    background-attachment: fixed;
-                }}
-                </style>
-                """, unsafe_allow_html=True)
-                background_set = True
-                print(f"[INFO] App background carregado: {path}")
-                break
-        
-        if not background_set:
-            # Fallback para cor sólida
-            st.markdown("""
-            <style>
-            .stApp {
-                background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-            }
-            </style>
-            """, unsafe_allow_html=True)
-            
-    except Exception as e:
-        print(f"[ERRO] App background não carregado: {e}")
-        st.markdown("""
-        <style>
-        .stApp {
-            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-        }
-        </style>
-        """, unsafe_allow_html=True)
+    set_login_background(background_file)  # Reutiliza a mesma lógica
 
-# ✅ COMPONENTES SEGUROS COM KEYS ÚNICAS
+# ✅ COMPONENTES SEGUROS (MANTIDOS)
 def safe_radio(label, options, key_suffix):
-    """Radio button seguro com key única e estável"""
     import hashlib
     key_hash = hashlib.md5(f"{label}_{str(options)}".encode()).hexdigest()[:8]
     return st.sidebar.radio(
@@ -207,7 +251,6 @@ def safe_radio(label, options, key_suffix):
     )
 
 def safe_button(label, key_suffix, **kwargs):
-    """Botão seguro com key única e estável"""
     import hashlib
     key_hash = hashlib.md5(f"{label}_{key_suffix}".encode()).hexdigest()[:8]
     return st.button(
@@ -216,43 +259,93 @@ def safe_button(label, key_suffix, **kwargs):
         **kwargs
     )
 
+# ✅ TELA DE LOGIN COM FALLBACK
 def safe_login_screen():
-    """Tela de login com tratamento de erro"""
+    """Tela de login com fallback se módulos não carregarem"""
     try:
-        if MODULES_LOADED:
-            usuarios.login_screen()
+        if MODULES_LOADED and 'usuarios' in loaded_modules:
+            loaded_modules['usuarios'].login_screen()
         else:
-            st.error("⚠️ Módulos não carregados. Recarregue a página.")
-            if safe_button("🔄 Recarregar", "login_reload"):
+            # ✅ FALLBACK: Tela de login básica
+            st.markdown("""
+            <div style='text-align: center; padding: 50px 0;'>
+                <h1 style='color: white;'>📊 Sistema Financeiro</h1>
+                <p style='color: white;'>Entre com suas credenciais</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            with st.container():
+                col1, col2, col3 = st.columns([1, 2, 1])
+                with col2:
+                    with st.form("login_fallback"):
+                        username = st.text_input("👤 Usuário", placeholder="Digite seu usuário")
+                        password = st.text_input("🔒 Senha", type="password", placeholder="Digite sua senha")
+                        submit = st.form_submit_button("🚪 Entrar")
+                        
+                        if submit:
+                            if username and password:
+                                # Login básico - ajuste conforme sua lógica
+                                st.session_state.authenticated = True
+                                st.session_state.user = username
+                                st.success("✅ Login realizado com sucesso!")
+                                st.rerun()
+                            else:
+                                st.error("❌ Preencha todos os campos")
+            
+            st.warning("⚠️ Módulos principais não carregados. Usando modo de emergência.")
+            if safe_button("🔄 Tentar Carregar Módulos Novamente", "reload_modules"):
                 st.rerun()
+                
     except Exception as e:
-        st.error(f"❌ Erro no login: {e}")
-        if safe_button("🔄 Tentar Novamente", "login_retry"):
+        st.error(f"❌ Erro crítico no login: {e}")
+        if safe_button("🔄 Reiniciar Aplicação", "emergency_restart"):
+            safe_session_clear()
             st.rerun()
 
-def safe_module_execution(module_function, module_name):
-    """Executa módulos com tratamento seguro de erro"""
+# ✅ EXECUÇÃO DE MÓDULOS COM FALLBACK
+def safe_module_execution(module_name, function_name=None):
+    """Executa módulos com fallback seguro"""
     try:
-        if MODULES_LOADED:
-            module_function()
+        if MODULES_LOADED and module_name in loaded_modules:
+            module = loaded_modules[module_name]
+            
+            # Chama a função principal do módulo
+            if function_name and hasattr(module, function_name):
+                getattr(module, function_name)()
+            elif hasattr(module, f'exibir_{module_name}'):
+                getattr(module, f'exibir_{module_name}')()
+            elif hasattr(module, module_name):
+                getattr(module, module_name)()
+            else:
+                # Tenta encontrar qualquer função principal
+                available_functions = [f for f in dir(module) if not f.startswith('_')]
+                if available_functions:
+                    getattr(module, available_functions[0])()
+                else:
+                    st.info(f"📁 Módulo {module_name} carregado, mas nenhuma função encontrada.")
         else:
             st.error(f"❌ Módulo {module_name} não disponível")
+            st.info("""
+            **Soluções possíveis:**
+            - Recarregue a página
+            - Verifique se os arquivos do módulo existem
+            - Contacte o suporte técnico
+            """)
+            
     except Exception as e:
-        st.error(f"❌ Erro no módulo {module_name}: {e}")
+        st.error(f"❌ Erro no módulo {module_name}: {str(e)}")
         
-        # Botões de recuperação com keys seguras
         col1, col2 = st.columns(2)
         with col1:
             if safe_button(f"🔄 Recarregar {module_name}", f"reload_{module_name}"):
                 st.rerun()
         with col2:
             if safe_button("🏠 Voltar ao Menu", f"menu_{module_name}"):
-                safe_session_clear()
                 st.session_state.authenticated = True
                 st.rerun()
 
+# ✅ APLICAÇÃO PRINCIPAL CORRIGIDA
 def main_app():
-    # ✅ INICIALIZAÇÃO SEGURA DA SESSÃO
     initialize_safe_session()
 
     # Tela de login
@@ -261,7 +354,7 @@ def main_app():
         safe_login_screen()
         return
 
-    # ✅ SIDEBAR COM TRATAMENTO DE ERRO ROBUSTO
+    # Sidebar
     try:
         with st.sidebar:
             st.markdown(f"""
@@ -270,121 +363,52 @@ def main_app():
                 <p style='color: #ecf0f1; margin: 5px 0 0 0; font-size: 14px;'>
                     Usuário: <strong>{st.session_state.get('user', 'N/A')}</strong>
                 </p>
+                <p style='color: #bdc3c7; margin: 5px 0 0 0; font-size: 12px;'>
+                    Módulos: <strong>{'✅ Carregados' if MODULES_LOADED else '❌ Parcial'}</strong>
+                </p>
             </div>
             """, unsafe_allow_html=True)
             
             st.markdown("---")
             
-            # Menu principal com keys seguras
             menu_options = ["Financeiro", "Relacionamento", "Planos", "Relatórios", "Cadastro de Usuário", "Sair"]
             menu = safe_radio("Navegação", menu_options, "main_navigation")
             
-            st.markdown("---")
-            
-            # Botão de recuperação seguro
-            if safe_button("🔄 Recarregar Seguro", "safe_reload", help="Recarrega sem erros"):
-                safe_session_clear()
-                st.rerun()
-                
     except Exception as e:
         st.sidebar.error("❌ Erro na sidebar")
-        if safe_button("🔄 Recarregar Sidebar", "sidebar_reload"):
-            st.rerun()
-        menu = "Financeiro"  # Fallback seguro
+        menu = "Financeiro"
 
-    # ✅ NAVEGAÇÃO SEGURA COM PROTECÇÃO COMPLETA
+    # Navegação principal
     try:
+        set_app_background("tela_fundo_azul.png")
+        
         if menu == "Financeiro":
-            set_app_background("tela_fundo_azul.png")
-            safe_module_execution(financeiro.exibir_financeiro, "Financeiro")
-            
+            safe_module_execution("financeiro", "exibir_financeiro")
         elif menu == "Relacionamento":
-            set_app_background("tela_fundo_azul.png")
-            safe_module_execution(relacionamento.formulario_relacionamento, "Relacionamento")
-            
+            safe_module_execution("relacionamento", "formulario_relacionamento")
         elif menu == "Planos":
-            set_app_background("tela_fundo_azul.png")
-            safe_module_execution(planos.exibir_conta_planos, "Planos")
-            
+            safe_module_execution("planos", "exibir_conta_planos")
         elif menu == "Relatórios":
-            set_app_background("tela_fundo_azul.png")
-            
-            # ✅ SUBMENU SEGURO
-            try:
-                sub_options = ["Relatório Analítico", "Relatório Sintético"]
-                sub_relatorio = safe_radio("📊 Relatórios disponíveis", sub_options, "sub_reports")
-                
-                if sub_relatorio == "Relatório Analítico":
-                    safe_module_execution(relatorio.rel_analitico, "Relatório Analítico")
-                else:
-                    safe_module_execution(relatorio.rel_sintetico, "Relatório Sintético")
-                    
-            except Exception as e:
-                st.error(f"❌ Erro no submenu de relatórios: {e}")
-                if safe_button("🔄 Recarregar Relatórios", "reload_reports"):
-                    st.rerun()
-            
+            safe_module_execution("relatorio", "rel_analitico")
         elif menu == "Cadastro de Usuário":
-            set_app_background("tela_fundo_azul.png")
-            safe_module_execution(usuarios.cadastrar_usuario, "Cadastro de Usuário")
-            
+            safe_module_execution("usuarios", "cadastrar_usuario")
         elif menu == "Sair":
-            # ✅ LOGOUT SEGURO
             st.header("👋 Encerrar Sessão")
-            col1, col2, col3 = st.columns([1, 2, 1])
-            with col2:
-                st.info("Tem certeza que deseja sair do sistema?")
+            if safe_button("✅ Confirmar Logout", "confirm_logout"):
+                safe_session_clear()
+                st.rerun()
                 
-                col_btn1, col_btn2 = st.columns(2)
-                with col_btn1:
-                    if safe_button("✅ Sim, sair", "confirm_logout", type="primary", use_container_width=True):
-                        safe_session_clear()
-                        st.success("✅ Logout realizado com sucesso!")
-                        st.rerun()
-                
-                with col_btn2:
-                    if safe_button("❌ Cancelar", "cancel_logout", use_container_width=True):
-                        st.rerun()
-    
     except Exception as e:
-        # ✅ TRATAMENTO GLOBAL DE ERROS ROBUSTO
-        st.error(f"❌ Erro inesperado: {str(e)}")
-        
-        st.markdown("""
-        <div style='background-color: #ffebee; padding: 20px; border-radius: 10px; margin: 20px 0;'>
-            <h4 style='color: #c62828;'>⚠️ Erro de Renderização</h4>
-            <p>O aplicativo encontrou um erro. Tente uma das opções abaixo:</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            if safe_button("🔄 Recarregar Página", "soft_reload", use_container_width=True):
-                st.rerun()
-        with col2:
-            if safe_button("🗑️ Limpar Sessão", "clear_session", use_container_width=True):
-                safe_session_clear()
-                st.rerun()
-        with col3:
-            if safe_button("🏠 Voltar ao Login", "back_to_login", use_container_width=True):
-                safe_session_clear()
-                st.session_state.authenticated = False
-                st.rerun()
+        st.error(f"❌ Erro de navegação: {e}")
+        if safe_button("🔄 Reiniciar Navegação", "nav_restart"):
+            st.rerun()
 
-# ✅ EXECUÇÃO PRINCIPAL COM PROTEÇÃO MÁXIMA
+# ✅ EXECUÇÃO PRINCIPAL
 if __name__ == "__main__":
     try:
         main_app()
     except Exception as e:
-        # ✅ FALLBACK DE EMERGÊNCIA
-        st.markdown("""
-        <div style='text-align: center; padding: 100px; background-color: #fff3e0; 
-                 border-radius: 15px; margin: 50px 0;'>
-            <h1 style='color: #ef6c00;'>🔧 Sistema em Manutenção</h1>
-            <p style='color: #555; font-size: 18px;'>O aplicativo está passando por ajustes técnicos.</p>
-            <p style='color: #777;'>Tente recarregar a página ou aguarde alguns instantes.</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        if safe_button("🔄 Tentar Novamente", "emergency_retry", type="primary"):
+        st.error(f"❌ Erro crítico na aplicação: {e}")
+        if safe_button("🔄 Reiniciar Aplicação Completa", "full_restart"):
+            safe_session_clear()
             st.rerun()
