@@ -398,8 +398,8 @@ def formulario_relacionamento():
 
     # CORREÇÃO: Processar ações FORA do form para evitar duplicação
     if 'incluir' in locals() and incluir:
-        if not nome or not st.session_state.get("form_cpf_cnpj"):
-            st.error("❌ Nome e CPF/CNPJ são obrigatórios!")
+        if not nome.strip():
+            st.error("❌ O campo Nome é obrigatório!")
         else:
             # CORREÇÃO CRÍTICA: Garantir que data_nas seja salva corretamente
             data_nas_str = data_nascimento.strftime("%Y-%m-%d") if data_nascimento else None
