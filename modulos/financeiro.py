@@ -12,6 +12,7 @@ import sys
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_FILE = os.path.join(BASE_DIR, "nps_financeiro.db")
+st.sidebar.info(f"📁 Banco em uso: {DB_FILE}")
 # ----------------------------
 # Funções de utilidade
 # ----------------------------

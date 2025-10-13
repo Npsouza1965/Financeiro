@@ -5,6 +5,7 @@ import os
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_FILE = os.path.join(BASE_DIR, "nps_financeiro.db")
+st.sidebar.info(f"📁 Banco em uso: {DB_FILE}")
 
 
 def set_login_background_planos(filename="tela_fundo_azul.png"):
