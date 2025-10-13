@@ -300,11 +300,20 @@ def exibir_financeiro():
         # Converter datas para comparação
         df_fin["data"] = pd.to_datetime(df_fin["data"], errors="coerce").dt.date
         
-        # Filtrar por datas
-        df_filtrado_periodo = df_fin[
-            (df_fin["data"] >= data_inicio) &
-            (df_fin["data"] <= data_fim) &
-            (df_fin["tipo"] == tipo_selecionado)
+        # Converter 'data' para datetime.date com segurança
+        df_fin["data"] = pd.to_datetime(df_fin["data"], errors="coerce").dt.date
+
+        # Garantir que 'tipo' é string simples (não Series complexa)
+        df_fin["tipo"] = df_fin["tipo"].astype(str).fillna("")
+
+        # Filtrar apenas linhas com data válida
+        df_validas = df_fin[df_fin["data"].notnull()]
+
+        # Aplicar o filtro de período e tipo
+        df_filtrado_periodo = df_validas[
+            (df_validas["data"] >= data_inicio) &
+            (df_validas["data"] <= data_fim) &
+            (df_validas["tipo"] == tipo_selecionado)
         ].sort_values("data", ascending=False)
         
         # CORREÇÃO: Resetar índice para evitar problemas de duplicação
