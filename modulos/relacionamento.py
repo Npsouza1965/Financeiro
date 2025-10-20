@@ -7,7 +7,29 @@ import os
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_FILE = os.path.join(BASE_DIR, "nps_financeiro.db")
-st.sidebar.info(f"📁 Banco em uso: {DB_FILE}")
+
+
+def styled_subheader(text, font_size="14px", color="#171ae0"):
+    """
+    Exibe um subtítulo com fonte personalizada
+    """
+    st.markdown(
+        f"""
+        <div style="
+            font-size: {font_size};
+            font-weight: bold;
+            color: {color};
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin-bottom: 10px;
+            margin-top: 20px;
+            padding: 5px 0;
+            border-bottom: 1px solid #ddd;
+        ">
+            {text}
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 # ----------------------------
 # Banco de dados
 # ----------------------------
@@ -190,7 +212,14 @@ def carregar_registro(cnpj_cpf):
 # Formulário principal
 # ----------------------------
 def formulario_relacionamento():
-    st.title("📋 Cadastro de Clientes e Fornecedores")
+    st.markdown(
+    """
+    <h1 style="font-size: 24px; color: #1f77b4; margin-bottom: 30px;">
+        📋 Cadastro de Clientes e Fornecedores
+    </h1>
+    """,
+    unsafe_allow_html=True
+)
     criar_tabela()
 
     # Inicializar session_state se não existir
@@ -252,7 +281,7 @@ def formulario_relacionamento():
         # CORREÇÃO: Layout organizado em seções
         
         # Seção 1: Dados Básicos
-        st.subheader("📝 Dados Básicos")
+        styled_subheader("📝 Dados Básicos", "14px")
         col1, col2 = st.columns(2)
         
         with col1:
@@ -279,7 +308,7 @@ def formulario_relacionamento():
         )
 
         # Seção 2: Documentos e Contato
-        st.subheader("📄 Documentos e Contato")
+        styled_subheader("📄 Documentos e Contato", "14px")
         col1, col2, col3 = st.columns(3)
         
         with col1:
@@ -323,7 +352,7 @@ def formulario_relacionamento():
                     st.rerun()
 
         # Seção 3: Endereço
-        st.subheader("🏠 Endereço")
+        styled_subheader("🏠 Endereço", "14px")
         endereco = st.text_input(
             "Endereço", 
             value=st.session_state.get("form_endereco", ""), 
@@ -354,7 +383,7 @@ def formulario_relacionamento():
             )
 
         # Seção 4: Contato
-        st.subheader("📞 Contato")
+        styled_subheader("📞 Contato","14px")
         col1, col2 = st.columns(2)
         
         with col1:
@@ -374,7 +403,7 @@ def formulario_relacionamento():
             )
 
         # Seção 5: Observações
-        st.subheader("📋 Observações")
+        styled_subheader("📋 Observações", "14px")
         obs = st.text_area(
             "Observações", 
             value=st.session_state.get("form_obs", ""), 
