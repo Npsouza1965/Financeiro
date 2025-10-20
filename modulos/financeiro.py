@@ -14,6 +14,8 @@ from datetime import date, datetime
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_FILE = os.path.join(BASE_DIR, "nps_financeiro.db")
 
+if not os.path.exists(DB_FILE):
+    raise FileNotFoundError(f"Banco de dados não encontrado em: {DB_FILE}")
 
 def styled_subheader(text, font_size="14px", color="#171ae0"):
     """
