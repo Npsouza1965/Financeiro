@@ -3,10 +3,8 @@ import streamlit as st
 import sqlite3
 import hashlib
 import os
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_FILE = os.path.join(BASE_DIR, "nps_financeiro.db")
-st.sidebar.info(f"📁 Banco em uso: {DB_FILE}")
+import sys
+from config import DB_FILE
 
 # ----------------------------
 # Funções de banco de dados
@@ -38,28 +36,29 @@ def criar_tabela_usuarios():
             )
         """)
         
-        # Verificar se o admin já existe
-        cursor.execute("SELECT * FROM usuarios WHERE usuario = 'admin'")
+        # Verificar se o Nilton já existe
+        cursor.execute("SELECT * FROM usuarios WHERE usuario = 'Nilton'")
         admin_existente = cursor.fetchone()
         
         if not admin_existente:
-            senha_hash = hashlib.sha256("admin123".encode()).hexdigest()
+            # Criar usuário Nilton como admin
+            senha_hash = hashlib.sha256("1502".encode()).hexdigest()
             cursor.execute(
                 "INSERT INTO usuarios (usuario, senha, role) VALUES (?, ?, ?)",
-                ("admin", senha_hash, "admin")
+                ("Nilton", senha_hash, "admin")
             )
-            print("✅ Usuário admin criado com sucesso!")
+            print("✅ Usuário Nilton criado como admin!")
         else:
-            print("ℹ️ Usuário admin já existe")
+            # Garantir que o Nilton seja admin
+            if admin_existente['role'] != 'admin':
+                cursor.execute("UPDATE usuarios SET role = 'admin' WHERE usuario = 'Nilton'")
+                print("✅ Role do Nilton atualizado para admin!")
         
         conn.commit()
         return True
         
-    except sqlite3.Error as e:
-        print(f"❌ Erro SQLite: {e}")
-        return False
     except Exception as e:
-        print(f"❌ Erro geral: {e}")
+        print(f"❌ Erro: {e}")
         return False
     finally:
         conn.close()
@@ -85,28 +84,20 @@ def autenticar_usuario(usuario, senha):
     finally:
         conn.close()
 
-def cadastrar_usuario(usuario, senha):
-    """Cadastra novo usuário (usado no login/cadastro de usuários comuns)"""
-    senha_hash = hashlib.sha256(senha.encode()).hexdigest()
+def obter_role_usuario(usuario):
+    """Obtém o role (perfil) do usuário"""
     conn = conectar_db()
     if conn is None:
-        return False
+        return "user"
         
     cursor = conn.cursor()
     try:
-        cursor.execute(
-            "INSERT INTO usuarios (usuario, senha) VALUES (?, ?)", 
-            (usuario, senha_hash)
-        )
-        conn.commit()
-        st.success("✅ Usuário cadastrado com sucesso!")
-        return True
-    except sqlite3.IntegrityError:
-        st.error("❌ Usuário já existe!")
-        return False
+        cursor.execute("SELECT role FROM usuarios WHERE usuario = ?", (usuario,))
+        result = cursor.fetchone()
+        return result["role"] if result else "user"
     except Exception as e:
-        st.error(f"❌ Erro ao cadastrar: {e}")
-        return False
+        print(f"❌ Erro ao obter role: {e}")
+        return "user"
     finally:
         conn.close()
 
@@ -134,26 +125,9 @@ def cadastrar_usuario_admin(usuario, senha, role="user"):
     finally:
         conn.close()
 
-def obter_role_usuario(usuario):
-    """Obtém o role (perfil) do usuário"""
-    conn = conectar_db()
-    if conn is None:
-        return "user"
-        
-    cursor = conn.cursor()
-    try:
-        cursor.execute("SELECT role FROM usuarios WHERE usuario = ?", (usuario,))
-        result = cursor.fetchone()
-        return result["role"] if result else "user"
-    except Exception as e:
-        print(f"❌ Erro ao obter role: {e}")
-        return "user"
-    finally:
-        conn.close()
-
 def listar_usuarios():
     """Lista todos os usuários (apenas admin)"""
-    if st.session_state.get("user") != "admin":
+    if st.session_state.get("role") != "admin":
         return []
         
     conn = conectar_db()
@@ -174,59 +148,52 @@ def listar_usuarios():
 # Interface de login
 # ----------------------------
 def login_screen():
-    """Tela de login do sistema"""
-    st.markdown("""
-        <h2 style="text-align: center; margin-bottom: 20px;">
-            💰 Sistema Financeiro
-        </h2>
-    """, unsafe_allow_html=True)
+    """Tela de login do sistema - APENAS LOGIN"""
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col2:
+        st.markdown("""
+            <div style="text-align: center; margin-bottom: 30px;">
+                <img src="SFH-01.png" 
+                     width="120" 
+                     style="margin-bottom: 15px; border-radius: 10px;">
+                <h2 style="color: #171ae0; margin-bottom: 5px;">
+                    Sistema Financeiro Hórus
+                </h2>
+                <p style="color: #666; font-size: 18px;">
+                    Faça login para acessar o sistema
+                </p>
+            </div>
+        """, unsafe_allow_html=True)
 
     criar_tabela_usuarios()
 
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        st.markdown("""
-            <div style="
-                padding: 25px; 
-                border-radius: 12px; 
-                background-color: #f9f9f9; 
-                box-shadow: 0px 4px 12px rgba(0,0,0,0.1);">
-        """, unsafe_allow_html=True)
+        st.markdown("### 🔑 Login")
+        
+        usuario = st.text_input("Usuário", placeholder="Digite seu usuário", key="login_user")
+        senha = st.text_input("Senha", type="password", placeholder="Digite sua senha", key="login_pass")
 
-        menu = ["Login", "Cadastrar"]
-        escolha = st.radio("🔑 Escolha uma opção", menu, horizontal=True)
+        if st.button("Entrar", use_container_width=True):
+            if not usuario or not senha:
+                st.error("❌ Preencha todos os campos!")
+            elif autenticar_usuario(usuario, senha):
+                st.session_state["authenticated"] = True
+                st.session_state["user"] = usuario
+                st.session_state["role"] = obter_role_usuario(usuario)
+                st.success(f"✅ Bem-vindo, {usuario}!")
+                st.rerun()
+            else:
+                st.error("❌ Usuário ou senha incorretos!")
 
-        if escolha == "Login":
-            usuario = st.text_input("Usuário", value="admin", key="login_user")
-            senha = st.text_input("Senha", type="password", value="admin123", key="login_pass")
-
-            if st.button("Entrar", use_container_width=True):
-                if not usuario or not senha:
-                    st.error("❌ Preencha todos os campos!")
-                elif autenticar_usuario(usuario, senha):
-                    st.session_state["authenticated"] = True
-                    st.session_state["user"] = usuario
-                    st.session_state["role"] = obter_role_usuario(usuario)
-                    st.success(f"✅ Bem-vindo, {usuario}!")
-                    st.rerun()
-                else:
-                    st.error("❌ Usuário ou senha incorretos!")
-
-        elif escolha == "Cadastrar":
-            new_username = st.text_input("Novo usuário", key="cad_user")
-            new_senha = st.text_input("Nova senha", type="password", key="cad_pass")
-            confirm_senha = st.text_input("Confirme a senha", type="password", key="cad_conf")
-
-            if st.button("Cadastrar", use_container_width=True):
-                if not new_username or not new_senha:
-                    st.warning("⚠️ Preencha todos os campos!")
-                elif new_senha != confirm_senha:
-                    st.error("❌ As senhas não coincidem!")
-                else:
-                    if cadastrar_usuario(new_username, new_senha):
-                        st.success("✅ Usuário cadastrado com sucesso! Faça login.")
-
-        st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown("---")
+        st.info("""
+        **ℹ️ Informações:**
+        - Para cadastrar novos usuários, faça login como **administrador**
+        - Acesse o menu **"Cadastro de Usuário"** após o login
+        """)
 
 # ----------------------------
 # Interface administrativa
@@ -235,10 +202,6 @@ def interface_cadastro_usuario():
     """Interface de cadastro de usuários (apenas admin)"""
     st.header("👥 Cadastro de Usuários")
     
-    if st.session_state.get("user") != "admin":
-        st.warning("⚠️ Apenas administradores podem cadastrar usuários.")
-        return
-
     with st.form("form_cadastro_usuario"):
         usuario = st.text_input("Novo usuário")
         senha = st.text_input("Senha", type="password")
@@ -253,16 +216,33 @@ def interface_cadastro_usuario():
             else:
                 if cadastrar_usuario_admin(usuario, senha, role):
                     st.success(f"✅ Usuário {usuario} cadastrado com sucesso!")
+                    st.rerun()
 
 def menu_cadastro_usuario():
     """Função principal para exibir menu de cadastro no Streamlit"""
+    
+    # ✅ VERIFICAÇÃO DE ADMIN
+    if st.session_state.get("role") != "admin":
+        st.warning("⚠️ Apenas administradores podem acessar esta funcionalidade.")
+        return
+    
+    # ✅ CHAMA A INTERFACE DE CADASTRO
     interface_cadastro_usuario()
     
-    if st.session_state.get("user") == "admin":
-        st.subheader("📋 Usuários Cadastrados")
-        usuarios = listar_usuarios()
-        if usuarios:
-            for user in usuarios:
-                st.write(f"👤 **{user['usuario']}** - Perfil: {user['role']}")
-        else:
-            st.info("ℹ️ Nenhum usuário cadastrado.")
+    # ✅ MOSTRA A LISTA DE USUÁRIOS
+    st.subheader("📋 Usuários Cadastrados")
+    usuarios = listar_usuarios()
+    
+    if usuarios:
+        for user in usuarios:
+            col1, col2, col3 = st.columns([3, 2, 1])
+            with col1:
+                st.write(f"👤 **{user['usuario']}**")
+            with col2:
+                st.write(f"Perfil: {user['role']}")
+            with col3:
+                if user['usuario'] != 'Nilton':  # Não permitir excluir o Nilton
+                    if st.button("🗑️", key=f"del_{user['id']}"):
+                        st.warning("Funcionalidade de exclusão em desenvolvimento")
+    else:
+        st.info("ℹ️ Nenhum usuário cadastrado.")

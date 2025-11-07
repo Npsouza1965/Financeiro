@@ -2,11 +2,15 @@ import streamlit as st
 import sqlite3
 import base64
 import os
+import sys
+# No TOPO do arquivo:
+from config import DB_FILE
+import sqlite3
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_FILE = os.path.join(BASE_DIR, "nps_financeiro.db")
-st.sidebar.info(f"📁 Banco em uso: {DB_FILE}")
+# Onde conecta ao banco:
+conn = sqlite3.connect(DB_FILE)
 
+# Usar assim:
 
 def set_login_background_planos(filename="tela_fundo_azul.png"):
     """
@@ -181,7 +185,7 @@ def exibir_conta_planos():
         grupo = st.text_input("Grupo", value=grupo_valor)
         subgrupo = st.text_input("Subgrupo", value=subgrupo_valor)
         plano = st.text_input("Plano", value=plano_valor)
-        categoria = st.text_input("Classificação", value=classificacao_valor)
+        categoria = st.text_input("Categoria", value=classificacao_valor)
 
         col1, col2 = st.columns(2)
         with col1:
