@@ -736,7 +736,7 @@ def exibir_financeiro():
             with col2:
                 bancos_brasileiros = [
                     "Banco do Brasil", "Bradesco", "Carteira", "Caixa Econômica", "Itaú",
-                    "Inter", "Infinit Pay", "Nubank", "Pan", "Pagaleve", "Santander"
+                    "Inter", "Infinit Pay", "Mercado Pago", "Nubank", "PagBank", "PicPay", "Pan", "Pagaleve", "Revolut","Santander", "Toro"
                 ]
                 
                 banco_debito = st.selectbox(
@@ -789,7 +789,7 @@ def exibir_financeiro():
             with col3:
                 bancos_brasileiros = [
                     "Banco do Brasil", "Bradesco", "Carteira", "Caixa Econômica", "Itaú",
-                    "Inter", "Infinit Pay", "Nubank", "Pan", "Pagaleve", "Santander"
+                    "Inter", "Infinit Pay", "Mercado Pago", "Nubank", "PagBank", "PicPay", "Pan", "Pagaleve", "Revolut","Santander", "Toro"
                 ]
                 
                 banco_atual = st.session_state.get("financeiro_banco", "")
@@ -837,10 +837,13 @@ def exibir_financeiro():
                         valor_form = 0.0
                         st.session_state["financeiro_parcelamento"] = None
             
-            # Descrição - CORREÇÃO: Carrega valor do session_state
+            # Descrição - CORREÇÃO: Carrega valor do session_state - ✅ AJUSTE APLICADO
             with col6:
                 descricao_atual = st.session_state.get("financeiro_descricao", "")
-                descricao_form = st.text_area("Descrição:", value=descricao_atual, height=60, key="financeiro_descricao_form")
+                descricao_form = st.text_input("Descrição:", 
+                                              value=descricao_atual, 
+                                              max_chars=40,  # ✅ Limite de 40 caracteres
+                                              key="financeiro_descricao_form")
 
         st.caption("* Campos obrigatórios")
 

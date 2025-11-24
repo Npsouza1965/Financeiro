@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 import os
 import sys
-from datetime import datetime, date
 import sqlite3
 import pandas as pd
 import streamlit as st
@@ -16,7 +15,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from fpdf import FPDF
-
+from datetime import datetime, date
 # -------------------------
 # CONFIGURAÇÃO / CONSTANTES - CORRIGIDA
 # -------------------------
@@ -392,29 +391,22 @@ def ordenar_transacoes(df):
     return df_ordenado
 
 def ordenar_por_relacao(df):
-    """Ordena por Relação de forma ascendente, considerando Receita primeiro, depois Despesas"""
+    """Ordena por relacao: Primeiro quem tem CRÉDITO, depois alfabético"""
     df_ordenado = df.copy()
     
-    # Criar coluna auxiliar para ordenação
-    def definir_ordem(relacao):
-        relacao_str = str(relacao).lower() if pd.notna(relacao) else ""
-        if 'receita' in relacao_str or 'entrada' in relacao_str or 'crédito' in relacao_str:
-            return 1
-        elif 'despesa' in relacao_str or 'saída' in relacao_str or 'débito' in relacao_str:
-            return 2
-        else:
-            return 3
+    if 'relacao' not in df_ordenado.columns:
+        return df_ordenado
     
-    df_ordenado['ordem_relacao'] = df_ordenado['relacao'].apply(definir_ordem)
+    # CORREÇÃO: Ordenar por CRÉDITO primeiro (receitas no topo), depois alfabético
+    df_ordenado['tem_credito'] = df_ordenado['CRÉDITO'] > 0
     
-    # Ordenar: tipo (receita primeiro), depois relação (alfabético)
     df_ordenado = df_ordenado.sort_values(
-        by=['ordem_relacao', 'relacao'], 
-        ascending=[True, True]
+        by=['tem_credito', 'relacao'], 
+        ascending=[False, True]  # False = True primeiro (receitas no topo)
     ).reset_index(drop=True)
     
     # Remover coluna auxiliar
-    df_ordenado = df_ordenado.drop('ordem_relacao', axis=1)
+    df_ordenado = df_ordenado.drop('tem_credito', axis=1)
     
     return df_ordenado
 
@@ -424,8 +416,27 @@ def ordenar_por_relacao(df):
 def display_tabela_unificada(df, tipo_relatorio="movimento"):
     """Exibe tabela com estilo unificado para todos os relatórios"""
     
-    # Filtrar linhas com valores zerados em Crédito e Débito
-    df_filtrado = df[(df["CRÉDITO"] != 0) | (df["DÉBITO"] != 0)].copy()
+    # CORREÇÃO: AGRUPAR POR "subgrupo" PARA REL_SINTETICO
+    if tipo_relatorio == "sintetico":
+        # Agrupamento por relacao (relacao_sintetico)
+        df_filtrado_transf = df[df['subgrupo'] != 'Transferências'].copy()
+        df_agrupado = df_filtrado_transf.groupby('relacao', as_index=False).agg({
+            'CRÉDITO': 'sum', 'DÉBITO': 'sum', 'grupo': 'first', 'subgrupo': 'first', 'plano': 'first'
+        })
+        
+    elif tipo_relatorio == "rel_sintetico":
+        # CORREÇÃO: Agrupamento por subgrupo (rel_sintetico)
+        df_filtrado_transf = df[df['plano'] != 'Transferências'].copy()
+        df_agrupado = df_filtrado_transf.groupby('subgrupo', as_index=False).agg({
+            'CRÉDITO': 'sum', 'DÉBITO': 'sum', 'plano': 'first','subgrupo': 'first' # fiz alteração aqui, remover ou não
+        })
+        
+    else:
+        # Para outros relatórios, manter lógica original
+        df_agrupado = df
+    
+    # Aplicar filtro de valores zerados NO DADO AGRUPADO
+    df_filtrado = df_agrupado[(df_agrupado["CRÉDITO"] != 0) | (df_agrupado["DÉBITO"] != 0)].copy()
     
     if df_filtrado.empty:
         st.info("Nenhuma transação com valores não zerados encontrada")
@@ -434,18 +445,31 @@ def display_tabela_unificada(df, tipo_relatorio="movimento"):
     # Ordenar transações conforme critério
     if tipo_relatorio == "movimento":
         df_ordenado = ordenar_transacoes(df_filtrado)
-    elif tipo_relatorio in ["sintetico", "rel_sintetico"]:
-        df_ordenado = ordenar_por_relacao(df_filtrado)
+        
+    elif tipo_relatorio == "sintetico":
+        df_ordenado = ordenar_por_relacao(df_filtrado)  # Ordena por relacao
+        
+    elif tipo_relatorio == "rel_sintetico":
+        # CORREÇÃO: Ordenar PRIMEIRO por Crédito, DEPOIS por Débito
+        df_ordenado = df_filtrado.sort_values(
+            by=['CRÉDITO', 'DÉBITO'], 
+            ascending=[False, False]
+        )
+
     else:
         df_ordenado = df_filtrado.sort_values(by=['data', 'descricao']).reset_index(drop=True)
     
     # Definir colunas conforme o tipo de relatório
     if tipo_relatorio == "analitico":
-        colunas = ["Data", "Relação", "Subgrupo", "Plano", "Descrição", "Crédito", "Débito"]
-        col_widths = [80, 100, 100, 120, 200, 100, 100]
+        colunas = ["Data", "relacao", "Plano", "Descrição", "Crédito", "Débito"]
+        col_widths = [80, 140, 120, 180, 100, 100]
     elif tipo_relatorio == "sintetico":
-        colunas = ["Relação", "Subgrupo", "Subgrupo", "Plano", "Crédito", "Débito"]
-        col_widths = [150, 150, 150, 150, 100, 100]
+        colunas = ["relacao", "Plano", "Crédito", "Débito"]
+        col_widths = [150,150, 100, 100]
+    elif tipo_relatorio == "rel_sintetico":
+        # CORREÇÃO: Colunas específicas para rel_sintetico
+        colunas = ["Subgrupo", "Crédito", "Débito"]
+        col_widths = [150, 100, 100]
     elif tipo_relatorio == "movimento":
         colunas = ["Data", "Plano", "Descrição", "Entrada", "Saída"]
         col_widths = [80, 120, 250, 100, 100]
@@ -470,8 +494,8 @@ def display_tabela_unificada(df, tipo_relatorio="movimento"):
         elif tipo_relatorio == "analitico":
             dados_tabela.append({
                 "Data": date_input_br(row["data"]),
-                "Relação": str(row["relacao"]) if pd.notna(row["relacao"]) else "",
-                "Subgrupo": str(row["grupo"]) if pd.notna(row["grupo"]) else "",
+                "relacao": str(row["relacao"]) if pd.notna(row["relacao"]) else "",
+                #"Subgrupo": str(row["grupo"]) if pd.notna(row["grupo"]) else "",
                 "Plano": str(row["plano"]) if pd.notna(row["plano"]) else "",
                 "Descrição": str(row["descricao"]) if pd.notna(row["descricao"]) else "",
                 "Crédito": formatar_moeda(row["CRÉDITO"]),
@@ -479,14 +503,21 @@ def display_tabela_unificada(df, tipo_relatorio="movimento"):
             })
         elif tipo_relatorio == "sintetico":
             dados_tabela.append({
-                "Relação": str(row["relacao"]) if pd.notna(row["relacao"]) else "",
-                "Subgrupo": str(row["grupo"]) if pd.notna(row["grupo"]) else "",
-                "Subgrupo": str(row["subgrupo"]) if pd.notna(row["subgrupo"]) else "",
+                "relacao": str(row["relacao"]) if pd.notna(row["relacao"]) else "",
+                #"Subgrupo": str(row["subgrupo"]) if pd.notna(row["subgrupo"]) else "",
                 "Plano": str(row["plano"]) if pd.notna(row["plano"]) else "",
                 "Crédito": formatar_moeda(row["CRÉDITO"]),
                 "Débito": formatar_moeda(row["DÉBITO"])
             })
-    
+        elif tipo_relatorio == "rel_sintetico":
+            # CORREÇÃO: Dados específicos para rel_sintetico
+            dados_tabela.append({
+                "Subgrupo": str(row["subgrupo"]) if pd.notna(row["subgrupo"]) else "",
+                #"Plano": str(row["plano"]) if pd.notna(row["plano"]) else "",
+                "Crédito": formatar_moeda(row["CRÉDITO"]),
+                "Débito": formatar_moeda(row["DÉBITO"])
+            })
+
     if not dados_tabela:
         st.info("Nenhuma transação encontrada")
         return df_ordenado
@@ -750,7 +781,7 @@ def gerar_pdf_relatorio_analitico(data_inicio, data_fim, status_filtro, df):
         df = df.sort_values(by=["data", "descricao"]).reset_index(drop=True)
         
         # Tabela
-        dados_tabela = [["Data", "Relação", "Subgrupo", "Plano", "Descrição", "Crédito", "Débito"]]
+        dados_tabela = [["Data", "relacao", "Subgrupo", "Plano", "Descrição", "Crédito", "Débito"]]
         
         for _, row in df.iterrows():
             data_str = date_input_br(row["data"])
@@ -819,14 +850,14 @@ def gerar_pdf_relatorio_analitico(data_inicio, data_fim, status_filtro, df):
         st.error(f"Erro ao gerar PDF: {e}")
 
 def gerar_pdf_relatorio_sintetico(data_inicio, data_fim, status_filtro, df):
-    """Gera PDF para relatório sintético"""
+    """Gera PDF para relatório sintético - CORRIGIDO"""
     try:
         os.makedirs(PASTA_RELATORIOS, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"relatorio_sintetico_{timestamp}.pdf"
         caminho_pdf = os.path.join(PASTA_RELATORIOS, filename)
         
-        doc = SimpleDocTemplate(caminho_pdf, pagesize=landscape(A4), rightMargin=20, leftMargin=20, topMargin=20, bottomMargin=20)
+        doc = SimpleDocTemplate(caminho_pdf, pagesize=A4, rightMargin=20, leftMargin=20, topMargin=20, bottomMargin=20)
         styles = getSampleStyleSheet()
         
         # Estilos
@@ -845,30 +876,50 @@ def gerar_pdf_relatorio_sintetico(data_inicio, data_fim, status_filtro, df):
         elements.append(Paragraph(f"Filtro: {status_filtro}", normal_style))
         elements.append(Spacer(1, 12))
         
-        # Filtrar valores zerados
-        df = df[(df["CRÉDITO"] != 0) | (df["DÉBITO"] != 0)]
+        # DEBUG: Verificar dados recebidos
+        st.sidebar.info(f"Total registros: {len(df)}")
+        if not df.empty:
+            st.sidebar.info(f"Colunas: {df.columns.tolist()}")
         
-        if df.empty:
+        # CORREÇÃO: Filtrar para desconsiderar "Transferências" no subgrupo
+        df_sem_transferencias = df[df['subgrupo'] != 'Transferências'].copy()
+        
+        # Filtrar valores zerados
+        df_filtrado = df_sem_transferencias[(df_sem_transferencias["CRÉDITO"] != 0) | (df_sem_transferencias["DÉBITO"] != 0)].copy()
+        
+        if df_filtrado.empty:
             st.warning("Nenhum dado com valores não zerados para gerar PDF.")
             return
         
-        # Agrupar dados SOMENTE por Relação (conforme solicitado)
-        df_agrupado = df.groupby(["relacao"], dropna=False).agg({
+        # DEBUG: Verificar após filtro
+        st.sidebar.info(f"Após filtro: {len(df_filtrado)} registros")
+        
+        # CORREÇÃO: Verificar se a coluna 'subgrupo' existe
+        coluna_agrupamento = "subgrupo" if "subgrupo" in df_filtrado.columns else "Subgrupo"
+        
+        # Agrupar dados SOMENTE por subgrupo
+        df_agrupado = df_filtrado.groupby([coluna_agrupamento], dropna=False).agg({
             "CRÉDITO": "sum",
             "DÉBITO": "sum"
         }).reset_index()
         
-        # Ordenar por relação (Receita primeiro, depois Despesas)
-        df_agrupado = ordenar_por_relacao(df_agrupado)
+        # DEBUG: Verificar agrupamento
+        st.sidebar.info(f"Após agrupamento: {len(df_agrupado)} subgrupos")
         
-        # Tabela
-        dados_tabela = [["Relação", "Crédito", "Débito"]]
+        # CORREÇÃO: Ordenar PRIMEIRO por Crédito (decrescente), DEPOIS por Débito (decrescente)
+        df_agrupado = df_agrupado.sort_values(
+            by=['CRÉDITO', 'DÉBITO'], 
+            ascending=[False, False]  # Maiores créditos primeiro, depois maiores débitos
+        )
+        
+        # Tabela - mantém a ordem de exibição: Subgrupo, Crédito, Débito
+        dados_tabela = [["Subgrupo", "Crédito", "Débito"]]
         
         for _, row in df_agrupado.iterrows():
-            relacao = str(row["relacao"]) if pd.notna(row["relacao"]) else ""
+            subgrupo_valor = str(row[coluna_agrupamento]) if pd.notna(row[coluna_agrupamento]) else "NÃO INFORMADO"
             credito = formatar_moeda(row["CRÉDITO"])
             debito = formatar_moeda(row["DÉBITO"])
-            dados_tabela.append([relacao, credito, debito])
+            dados_tabela.append([subgrupo_valor, credito, debito])
         
         # Calcular totais
         total_credito = df_agrupado["CRÉDITO"].sum()
@@ -878,8 +929,9 @@ def gerar_pdf_relatorio_sintetico(data_inicio, data_fim, status_filtro, df):
         # Adicionar linha de totais
         dados_tabela.append(["TOTAIS:", formatar_moeda(total_credito), formatar_moeda(total_debito)])
         
-        # Criar tabela com larguras automáticas
-        col_widths = calcular_larguras_colunas_automaticas(dados_tabela[0], "sintetico")
+        # Ajustar larguras das colunas para página vertical
+        col_widths = [300, 100, 100]  # Subgrupo mais larga, Crédito, Débito
+        
         tabela = Table(dados_tabela, colWidths=col_widths)
         estilo_tabela = TableStyle([
             ('FONTNAME', (0,0), (-1,-1), FONT_USADA),
@@ -904,8 +956,7 @@ def gerar_pdf_relatorio_sintetico(data_inicio, data_fim, status_filtro, df):
         elements.append(Paragraph(f"Saldo: {formatar_moeda(saldo)}", normal_style))
         
         # Rodapé
-        elements.append(Spacer(1, 9
-        ))
+        elements.append(Spacer(1, 9))
         elements.append(Paragraph(f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M')}", rodape_style))
         
         # Construir PDF
@@ -924,6 +975,7 @@ def gerar_pdf_relatorio_sintetico(data_inicio, data_fim, status_filtro, df):
             
     except Exception as e:
         st.error(f"Erro ao gerar PDF: {e}")
+        st.error(f"Detalhes do erro: {str(e)}")
 
 def gerar_pdf_relacao_analitico(data_inicio, data_fim, status_filtro, df):
     """Gera PDF para relação analítico"""
@@ -962,42 +1014,54 @@ def gerar_pdf_relacao_analitico(data_inicio, data_fim, status_filtro, df):
         # Ordenar dados
         df = df.sort_values(by=["data", "descricao"]).reset_index(drop=True)
         
-        # Tabela
-        dados_tabela = [["Data", "Relação", "Subgrupo", "Plano", "Descrição", "Crédito", "Débito"]]
+        # Tabela - Ajuste das colunas
+        dados_tabela = [["Data", "Relação", "Plano", "Descrição", "Crédito", "Débito"]]
         
         for _, row in df.iterrows():
             data_str = date_input_br(row["data"])
             relacao = str(row["relacao"]) if "relacao" in row and pd.notna(row["relacao"]) else ""
-            grupo = str(row["grupo"]) if "grupo" in row and pd.notna(row["grupo"]) else ""
             plano = str(row["plano"]) if "plano" in row and pd.notna(row["plano"]) else ""
             descricao = str(row["descricao"]) if "descricao" in row and pd.notna(row["descricao"]) else ""
             credito = formatar_moeda(row["CRÉDITO"])
             debito = formatar_moeda(row["DÉBITO"])
             
-            dados_tabela.append([data_str, relacao, grupo, plano, descricao, credito, debito])
+            dados_tabela.append([data_str, relacao, plano, descricao, credito, debito])
         
         # Calcular totais
         total_credito = df["CRÉDITO"].sum()
         total_debito = df["DÉBITO"].sum()
         saldo = total_credito - total_debito
         
-        # Adicionar linha de totais
-        dados_tabela.append(["", "", "", "", "TOTAIS:", formatar_moeda(total_credito), formatar_moeda(total_debito)])
+        # Adicionar linha de totais - CORRIGIDO: número de colunas
+        dados_tabela.append(["", "", "", "TOTAIS:", formatar_moeda(total_credito), formatar_moeda(total_debito)])
         
-        # Criar tabela com larguras automáticas
-        col_widths = calcular_larguras_colunas_automaticas(dados_tabela[0], "analitico")
-        tabela = Table(dados_tabela, colWidths=col_widths)
+        # Definir larguras das colunas manualmente para melhor ajuste
+        # Ajuste estas proporções conforme necessário
+        larguras_colunas = [
+            60,  # Data
+            180,  # Relação
+            80,  # Plano
+            180, # Descrição (mais larga)
+            75,  # Crédito
+            75   # Débito
+        ]
+        
+        # Ou use a função automática se preferir
+        # larguras_colunas = calcular_larguras_colunas_automaticas(dados_tabela[0], "analitico")
+        
+        tabela = Table(dados_tabela, colWidths=larguras_colunas)
         estilo_tabela = TableStyle([
             ('FONTNAME', (0,0), (-1,-1), FONT_USADA),
             ('FONTSIZE', (0,0), (-1,-1), 8),
             ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
             ('GRID', (0,0), (-1,-1), 0.5, colors.black),
             ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-            ('ALIGN', (0,0), (4,-1), 'LEFT'),
-            ('ALIGN', (5,0), (-1,-1), 'RIGHT'),
-            ('FONTNAME', (5,1), (-1,-1), 'Courier'),
+            ('ALIGN', (0,0), (3,-1), 'LEFT'),      # Colunas textuais alinhadas à esquerda
+            ('ALIGN', (4,0), (-1,-1), 'RIGHT'),    # Colunas numéricas alinhadas à direita
+            ('FONTNAME', (4,1), (-1,-1), 'Courier'), # Fonte monoespaçada para valores
             ('BACKGROUND', (0,-1), (-1,-1), colors.lightgrey),
-            ('FONTNAME', (5,-1), (-1,-1), 'Courier-Bold'),
+            ('FONTNAME', (4,-1), (-1,-1), 'Courier-Bold'),
+            ('FONTSIZE', (0,-1), (-1,-1), 9),      # Fonte um pouco maior para totais
         ])
         tabela.setStyle(estilo_tabela)
         elements.append(tabela)
@@ -1010,8 +1074,7 @@ def gerar_pdf_relacao_analitico(data_inicio, data_fim, status_filtro, df):
         elements.append(Paragraph(f"Saldo: {formatar_moeda(saldo)}", normal_style))
         
         # Rodapé
-        elements.append(Spacer(1, 9
-        ))
+        elements.append(Spacer(1, 9))
         elements.append(Paragraph(f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M')}", rodape_style))
         
         # Construir PDF
@@ -1039,7 +1102,7 @@ def gerar_pdf_relacao_sintetico(data_inicio, data_fim, status_filtro, df):
         filename = f"relacao_sintetico_{timestamp}.pdf"
         caminho_pdf = os.path.join(PASTA_RELATORIOS, filename)
         
-        doc = SimpleDocTemplate(caminho_pdf, pagesize=landscape(A4), rightMargin=20, leftMargin=20, topMargin=20, bottomMargin=20)
+        doc = SimpleDocTemplate(caminho_pdf, pagesize=A4, rightMargin=20, leftMargin=20, topMargin=20, bottomMargin=20)
         styles = getSampleStyleSheet()
         
         # Estilos
@@ -1062,7 +1125,9 @@ def gerar_pdf_relacao_sintetico(data_inicio, data_fim, status_filtro, df):
         st.sidebar.info(f"Total registros: {len(df)}")
         if not df.empty:
             st.sidebar.info(f"Colunas: {df.columns.tolist()}")
-            st.sidebar.info(f"Relações únicas: {df['relacao'].nunique()}")
+            # CORREÇÃO: Verificar coluna 'relacao' em vez de 'relacao'
+            if 'relacao' in df.columns:
+                st.sidebar.info(f"Relações únicas: {df['relacao'].nunique()}")
         
         # Filtrar valores zerados
         df_filtrado = df[(df["CRÉDITO"] != 0) | (df["DÉBITO"] != 0)].copy()
@@ -1074,8 +1139,11 @@ def gerar_pdf_relacao_sintetico(data_inicio, data_fim, status_filtro, df):
         # DEBUG: Verificar após filtro
         st.sidebar.info(f"Após filtro: {len(df_filtrado)} registros")
         
-        # Agrupar dados SOMENTE por Relação (conforme solicitado)
-        df_agrupado = df_filtrado.groupby(["relacao"], dropna=False).agg({
+        # CORREÇÃO: Agrupar por 'relacao' em vez de 'relacao'
+        coluna_agrupamento = "relacao" if "relacao" in df_filtrado.columns else "relacao"
+        
+        # Agrupar dados SOMENTE por relacao (conforme solicitado)
+        df_agrupado = df_filtrado.groupby([coluna_agrupamento], dropna=False).agg({
             "CRÉDITO": "sum",
             "DÉBITO": "sum"
         }).reset_index()
@@ -1087,13 +1155,14 @@ def gerar_pdf_relacao_sintetico(data_inicio, data_fim, status_filtro, df):
         df_agrupado = ordenar_por_relacao(df_agrupado)
         
         # Tabela
-        dados_tabela = [["Relação", "Crédito", "Débito"]]
+        dados_tabela = [["relacao", "Crédito", "Débito"]]
         
         for _, row in df_agrupado.iterrows():
-            relacao = str(row["relacao"]) if pd.notna(row["relacao"]) else "NÃO INFORMADO"
+            # CORREÇÃO: Usar coluna_agrupamento em vez de "relacao" fixo
+            relacao_valor = str(row[coluna_agrupamento]) if pd.notna(row[coluna_agrupamento]) else "NÃO INFORMADO"
             credito = formatar_moeda(row["CRÉDITO"])
             debito = formatar_moeda(row["DÉBITO"])
-            dados_tabela.append([relacao, credito, debito])
+            dados_tabela.append([relacao_valor, credito, debito])
         
         # Calcular totais
         total_credito = df_agrupado["CRÉDITO"].sum()
@@ -1139,7 +1208,7 @@ def gerar_pdf_relacao_sintetico(data_inicio, data_fim, status_filtro, df):
         # Botão de download
         with open(caminho_pdf, "rb") as f:
             st.download_button(
-                label="⬇️ Baixar PDF - Relação Sintético", 
+                label="⬇️ Baixar PDF - relacao Sintético", 
                 data=f.read(), 
                 file_name=filename, 
                 mime="application/pdf", 
@@ -1158,20 +1227,24 @@ def rel_analitico():
     aplicar_estilo_unificado()
     
     col1, col2, col3 = st.columns(3)
+    
     with col1:
-        data_inicio_str = st.text_input("Data inicial:", date_input_br(date.today()), key="analitico_data_inicio")
+        data_inicio = st.date_input(
+            "Data inicial:",
+            value=date.today(),
+            key="analitico_data_inicio",  # ← VÍRGULA ADICIONADA
+            format="DD/MM/YYYY"
+        )
     with col2:
-        data_fim_str = st.text_input("Data final:", date_input_br(date.today()), key="analitico_data_fim")
+        data_fim = st.date_input(
+            "Data final:",
+            value=date.today(),
+            key="analitico_data_fim",  # ← VÍRGULA ADICIONADA
+            format="DD/MM/YYYY"
+        )
     with col3:
-        status_filtro = st.selectbox("Status", ["Todos", "Pago", "Aberto"], key="analitico_status_select")
-    
-    try:
-        data_inicio = datetime.strptime(data_inicio_str, "%d/%m/%Y").date()
-        data_fim = datetime.strptime(data_fim_str, "%d/%m/%Y").date()
-    except:
-        st.warning("⚠️ Formato de data inválido. Use DD/MM/AAAA")
-        return
-    
+        status_filtro = st.selectbox("Status", ["Todos", "Pago", "Aberto"], key="analitico_status_select")    
+               
     df = carregar_dados_financeiros(data_inicio, data_fim, status_filtro)
     if df.empty:
         st.warning("Nenhum dado encontrado.")
@@ -1203,20 +1276,24 @@ def rel_sintetico():
     aplicar_estilo_unificado()
     
     col1, col2, col3 = st.columns(3)
+    
     with col1:
-        data_inicio_str = st.text_input("Data inicial:", date_input_br(date.today()), key="sintetico_data_inicio")
+        data_inicio = st.date_input(
+            "Data inicial:",
+            value=date.today(),
+            key="sintetico_data_inicio",  # ← VÍRGULA ADICIONADA
+            format="DD/MM/YYYY"
+        )
     with col2:
-        data_fim_str = st.text_input("Data final:", date_input_br(date.today()), key="sintetico_data_fim")
+        data_fim = st.date_input(
+            "Data final:",
+            value=date.today(),
+            key="sintetico_data_fim",  # ← VÍRGULA ADICIONADA
+            format="DD/MM/YYYY"
+        )
     with col3:
-        status_filtro = st.selectbox("Status", ["Todos", "Pago", "Aberto"], key="sintetico_status_select")
-    
-    try:
-        data_inicio = datetime.strptime(data_inicio_str, "%d/%m/%Y").date()
-        data_fim = datetime.strptime(data_fim_str, "%d/%m/%Y").date()
-    except:
-        st.warning("⚠️ Formato de data inválido. Use DD/MM/AAAA")
-        return
-    
+        status_filtro = st.selectbox("Status", ["Todos", "Pago", "Aberto"], key="sintetico_status_select")  
+
     df = carregar_dados_financeiros(data_inicio, data_fim, status_filtro)
     if df.empty:
         st.warning("Nenhum dado encontrado.")
@@ -1227,105 +1304,49 @@ def rel_sintetico():
     st.markdown(f'<div class="header-relatorio"><b>Período:</b> {date_input_br(data_inicio)} a {date_input_br(data_fim)}</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="header-relatorio"><b>Filtro:</b> {status_filtro}</div>', unsafe_allow_html=True)
     
-    # AGRUPAR POR RELAÇÃO E GRUPO
-    if not df.empty:
-        # Agrupar por relação e grupo, somar créditos e débitos
-        df_agrupado = df.groupby(['relacao', 'grupo']).agg({
-            'CRÉDITO': 'sum',
-            'DÉBITO': 'sum'
-        }).reset_index()
-        
-        # ORDENAR: Primeiro Receitas (Créditos), depois Despesas (Débitos)
-        df_agrupado = df_agrupado.sort_values(['grupo', 'relacao'])
-        
-        # Exibir tabela consolidada
-        st.markdown("### Relação Consolidada")
-        
-        # CABEÇALHO DA TABELA - PROFISSIONAL
-        col1, col2, col3, col4 = st.columns([5, 3, 2, 2])
-        with col1:
-            st.markdown("**Relação**")
-        with col2:
-            st.markdown("**Subgrupo**")
-        with col3:
-            st.markdown("**Crédito**")
-        with col4:
-            st.markdown("**Débito**")
-        
-        st.markdown("<hr style='margin: 10px 0;'>", unsafe_allow_html=True)
-        
-        # LINHAS DA TABELA - FONTE MAIOR E MAIS PROFISSIONAL
-        for index, row in df_agrupado.iterrows():
-            col1, col2, col3, col4 = st.columns([5, 3, 2, 2])
-            with col1:
-                st.text(row['relacao'])
-            with col2:
-                st.text(row['grupo'])
-            with col3:
-                # Mostrar crédito apenas se for maior que zero
-                valor_credito = f"R$ {row['CRÉDITO']:,.2f}" if row['CRÉDITO'] > 0 else ""
-                st.markdown(f"<div style='text-align: right; font-size: 14px; font-family: Calibri;'>{valor_credito}</div>", unsafe_allow_html=True)
-            with col4:
-                # Mostrar débito apenas se for maior que zero
-                valor_debito = f"R$ {row['DÉBITO']:,.2f}" if row['DÉBITO'] > 0 else ""
-                st.markdown(f"<div style='text-align: right; font-size: 14px; font-family: Calibri;'>{valor_debito}</div>", unsafe_allow_html=True)
-        
-        # Linha separadora
-        st.markdown("<hr style='margin: 20px 0;'>", unsafe_allow_html=True)
-        
-        # Resumo geral - FORMATO CORRETO E PROFISSIONAL
-        total_credito = df_agrupado['CRÉDITO'].sum()
-        total_debito = df_agrupado['DÉBITO'].sum()
-        
-        st.markdown("### Resumo Geral")
-        
-        # Container para o resumo com borda e padding
-        st.markdown("""
-        <div style='
-            border: 1px solid #e0e0e0; 
-            border-radius: 5px; 
-            padding: 15px; 
-            background-color: #f9f9f9;
-            margin: 10px 0;
-            font-family: Calibri;
-        '>
-        """, unsafe_allow_html=True)
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown(f"**Crédito**")
-            st.markdown(f"<div style='font-size: 16px; font-weight: bold; color: #006400;'>R$ {total_credito:,.2f}</div>", unsafe_allow_html=True)
-        with col2:
-            st.markdown(f"**Débito**")
-            st.markdown(f"<div style='font-size: 16px; font-weight: bold; color: #8B0000;'>R$ {total_debito:,.2f}</div>", unsafe_allow_html=True)
-        
-        st.markdown("</div>", unsafe_allow_html=True)
+    # CORREÇÃO: Usar display_tabela_unificada em vez de agrupamento manual
+    df_ordenado = display_tabela_unificada(df, "rel_sintetico")
+    
+    # Resumo BASEADO NOS DADOS AGRUPADOS
+    if not df_ordenado.empty:
+        total_credito = df_ordenado["CRÉDITO"].sum()
+        total_debito = df_ordenado["DÉBITO"].sum()
+        saldo = total_credito - total_debito
+    else:
+        total_credito = 0
+        total_debito = 0
+        saldo = 0
+    
+    st.markdown("---")
+    st.markdown("### Resumo")
+    display_resumo_movimento(0, total_credito, total_debito, saldo)
     
     # Botão PDF
     if st.button("📄 Gerar PDF - Relatório Sintético", key="pdf_sintetico"):
-        try:
-            gerar_pdf_relatorio_sintetico(data_inicio, data_fim, status_filtro, df_agrupado)
-        except Exception as e:
-            st.error(f"Erro ao gerar PDF: {str(e)}")
+        gerar_pdf_relatorio_sintetico(data_inicio, data_fim, status_filtro, df_ordenado)
 
 def relacao_analitico():
-    styled_subheader("📑 Relação Analítico", "16px", "#FFFFFF")
+    styled_subheader("📑 relacao Analítico", "16px", "#FFFFFF")
     aplicar_estilo_unificado()
     
     col1, col2, col3 = st.columns(3)
-    with col1:
-        data_inicio_str = st.text_input("Data inicial:", date_input_br(date.today()), key="rel_analitico_data_inicio")
-    with col2:
-        data_fim_str = st.text_input("Data final:", date_input_br(date.today()), key="rel_analitico_data_fim")
-    with col3:
-        status_filtro = st.selectbox("Status", ["Todos", "Pago", "Aberto"], key="rel_analitico_status")
     
-    try:
-        data_inicio = datetime.strptime(data_inicio_str, "%d/%m/%Y").date()
-        data_fim = datetime.strptime(data_fim_str, "%d/%m/%Y").date()
-    except:
-        st.warning("⚠️ Formato de data inválido. Use DD/MM/AAAA")
-        return
+    with col1:
+        data_inicio = st.date_input(
+            "Data inicial:",
+            value=date.today(),
+            key="analitico_data_inicio",  # ← VÍRGULA ADICIONADA
+            format="DD/MM/YYYY"
+        )
+    with col2:
+        data_fim = st.date_input(
+            "Data final:",
+            value=date.today(),
+            key="analitico_data_fim",  # ← VÍRGULA ADICIONADA
+            format="DD/MM/YYYY"
+        )
+    with col3:
+        status_filtro = st.selectbox("Status", ["Todos", "Pago", "Aberto"], key="analitico_status_select")  
     
     df = carregar_dados_financeiros(data_inicio, data_fim, status_filtro)
     if df.empty:
@@ -1350,27 +1371,31 @@ def relacao_analitico():
     display_resumo_movimento(0, total_credito, total_debito, saldo)
     
     # Botão PDF
-    if st.button("📄 Gerar PDF - Relação Analítico", key="pdf_rel_analitico"):
+    if st.button("📄 Gerar PDF - relacao Analítico", key="pdf_rel_analitico"):
         gerar_pdf_relacao_analitico(data_inicio, data_fim, status_filtro, df)
 
 def relacao_sintetico():
-    styled_subheader("📊 Relação Sintético", "16px", "#FFFFFF")
+    styled_subheader("📊 relacao Sintético", "16px", "#FFFFFF")
     aplicar_estilo_unificado()
     
     col1, col2, col3 = st.columns(3)
-    with col1:
-        data_inicio_str = st.text_input("Data inicial:", date_input_br(date.today()), key="rel_sintetico_data_inicio")
-    with col2:
-        data_fim_str = st.text_input("Data final:", date_input_br(date.today()), key="rel_sintetico_data_fim")
-    with col3:
-        status_filtro = st.selectbox("Status", ["Todos", "Pago", "Aberto"], key="rel_sintetico_status")
     
-    try:
-        data_inicio = datetime.strptime(data_inicio_str, "%d/%m/%Y").date()
-        data_fim = datetime.strptime(data_fim_str, "%d/%m/%Y").date()
-    except:
-        st.warning("⚠️ Formato de data inválido. Use DD/MM/AAAA")
-        return
+    with col1:
+        data_inicio = st.date_input(
+            "Data inicial:",
+            value=date.today(),
+            key="analitico_data_inicio",  # ← VÍRGULA ADICIONADA
+            format="DD/MM/YYYY"
+        )
+    with col2:
+        data_fim = st.date_input(
+            "Data final:",
+            value=date.today(),
+            key="analitico_data_fim",  # ← VÍRGULA ADICIONADA
+            format="DD/MM/YYYY"
+        )
+    with col3:
+        status_filtro = st.selectbox("Status", ["Todos", "Pago", "Aberto"], key="analitico_status_select")  
     
     df = carregar_dados_financeiros(data_inicio, data_fim, status_filtro)
     if df.empty:
@@ -1382,7 +1407,7 @@ def relacao_sintetico():
     st.markdown(f'<div class="header-relatorio"><b>Período:</b> {date_input_br(data_inicio)} a {date_input_br(data_fim)}</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="header-relatorio"><b>Filtro:</b> {status_filtro}</div>', unsafe_allow_html=True)
     
-    # Tabela (já filtra valores zerados e ordena por relação automaticamente)
+    # Tabela - AGORA COM AGRUPAMENTO POR "relacao"
     df_ordenado = display_tabela_unificada(df, "sintetico")
     
     # Resumo BASEADO NOS DADOS AGRUPADOS
@@ -1400,9 +1425,9 @@ def relacao_sintetico():
     st.markdown("### Resumo")
     display_resumo_movimento(0, total_credito, total_debito, saldo)
     
-    # Botão PDF - CORREÇÃO: usar os dados processados (df_ordenado) em vez dos originais (df)
-    if st.button("📄 Gerar PDF - Relação Sintético", key="pdf_rel_sintetico"):
-        gerar_pdf_relacao_sintetico(data_inicio, data_fim, status_filtro, df_ordenado)  # ← CORRIGIDO: usa df_ordenado
+    # Botão PDF
+    if st.button("📄 Gerar PDF - relacao Sintético", key="pdf_rel_sintetico"):
+        gerar_pdf_relacao_sintetico(data_inicio, data_fim, status_filtro, df_ordenado)
 
 def mov_caixa_banco():
     styled_subheader("🏦 Movimento Diário - Caixa/Banco", "16px", "#FFFFFF")
@@ -1410,16 +1435,10 @@ def mov_caixa_banco():
     
     col1, col2 = st.columns(2)
     with col1:
-        data_relatorio_str = st.text_input("Data do relatório:", date_input_br(date.today()), key="mov_caixa_data")
+        data_relatorio = st.date_input("Data do relatório:", value=date.today(), key="mov_caixa_data", format="DD/MM/YYYY")
     with col2:
         status_filtro = st.selectbox("Status", ["Todos", "Pago", "Aberto"], key="mov_caixa_status")
-    
-    try:
-        data_relatorio = datetime.strptime(data_relatorio_str, "%d/%m/%Y").date()
-    except:
-        st.warning("⚠️ Formato de data inválido. Use DD/MM/AAAA")
-        return
-    
+            
     df = carregar_dados_financeiros(data_relatorio, data_relatorio, status_filtro)
     if df.empty:
         st.warning("Nenhum movimento encontrado para esta data.")
@@ -1474,20 +1493,23 @@ def relatorio_categoria():
 
     # Entradas de filtro
     col1, col2, col3 = st.columns(3)
+    
     with col1:
-        data_inicio_str = st.text_input("Data inicial:", date_input_br(date.today()), key="rel_categoria_data_inicio")
+        data_inicio = st.date_input(
+            "Data inicial:",
+            value=date.today(),
+            key="analitico_data_inicio",  # ← VÍRGULA ADICIONADA
+            format="DD/MM/YYYY"
+        )
     with col2:
-        data_fim_str = st.text_input("Data final:", date_input_br(date.today()), key="rel_categoria_data_fim")
+        data_fim = st.date_input(
+            "Data final:",
+            value=date.today(),
+            key="analitico_data_fim",  # ← VÍRGULA ADICIONADA
+            format="DD/MM/YYYY"
+        )
     with col3:
-        status_filtro = st.selectbox("Status", ["Todos", "Pago", "Aberto"], key="rel_categoria_status")
-
-    # Converter datas
-    try:
-        data_inicio = datetime.strptime(data_inicio_str, "%d/%m/%Y").date()
-        data_fim = datetime.strptime(data_fim_str, "%d/%m/%Y").date()
-    except:
-        st.warning("⚠️ Formato de data inválido. Use DD/MM/AAAA")
-        return
+        status_filtro = st.selectbox("Status", ["Todos", "Pago", "Aberto"], key="analitico_status_select")  
 
     # Carregar dados
     df = carregar_dados_financeiros(data_inicio, data_fim, status_filtro)
@@ -1575,7 +1597,7 @@ def relatorio_categoria():
     )
 
     # Exibir tabela expandida
-    st.subheader("Relação por Subgrupo (Transferências Excluídas)")
+    st.subheader("relacao por Subgrupo (Transferências Excluídas)")
     st.dataframe(df_display[["Subgrupo", "Crédito", "Débito"]], use_container_width=True)
 
     # Gráficos horizontais com tamanho menor
@@ -1822,8 +1844,8 @@ if __name__ == "__main__":
         "Relatório por Categoria",
         "Relatório Analítico", 
         "Relatório Sintético", 
-        "Relação Analítico", 
-        "Relação Sintético",
+        "relacao Analítico", 
+        "relacao Sintético",
         "Movimento Diário"
     ])
     

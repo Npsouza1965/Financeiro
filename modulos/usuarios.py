@@ -144,6 +144,46 @@ def listar_usuarios():
     finally:
         conn.close()
 
+def excluir_usuario(usuario_id, usuario_nome):
+    """Exclui um usuário do sistema (apenas admin)"""
+    # Verificar se é admin
+    if st.session_state.get("role") != "admin":
+        st.error("❌ Apenas administradores podem excluir usuários!")
+        return False
+    
+    # Não permitir excluir o usuário Nilton
+    if usuario_nome == 'Nilton':
+        st.error("❌ Não é permitido excluir o usuário administrador principal!")
+        return False
+    
+    # Não permitir excluir o próprio usuário logado
+    if usuario_nome == st.session_state.get("user"):
+        st.error("❌ Você não pode excluir seu próprio usuário!")
+        return False
+    
+    conn = conectar_db()
+    if conn is None:
+        return False
+        
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DELETE FROM usuarios WHERE id = ?", (usuario_id,))
+        conn.commit()
+        
+        # Verificar se a exclusão foi bem sucedida
+        if cursor.rowcount > 0:
+            st.success(f"✅ Usuário '{usuario_nome}' excluído com sucesso!")
+            return True
+        else:
+            st.error("❌ Erro ao excluir usuário!")
+            return False
+            
+    except Exception as e:
+        st.error(f"❌ Erro ao excluir usuário: {e}")
+        return False
+    finally:
+        conn.close()
+
 # ----------------------------
 # Interface de login
 # ----------------------------
@@ -235,14 +275,32 @@ def menu_cadastro_usuario():
     
     if usuarios:
         for user in usuarios:
-            col1, col2, col3 = st.columns([3, 2, 1])
+            col1, col2, col3, col4 = st.columns([3, 2, 1, 1])
             with col1:
                 st.write(f"👤 **{user['usuario']}**")
             with col2:
                 st.write(f"Perfil: {user['role']}")
             with col3:
+                # Indicador para usuário atual
+                if user['usuario'] == st.session_state.get("user"):
+                    st.markdown("🟢 **Você**")
+            with col4:
                 if user['usuario'] != 'Nilton':  # Não permitir excluir o Nilton
-                    if st.button("🗑️", key=f"del_{user['id']}"):
-                        st.warning("Funcionalidade de exclusão em desenvolvimento")
+                    # Usar um container para evitar conflitos de keys
+                    with st.container():
+                        if st.button("🗑️ Excluir", key=f"del_{user['id']}"):
+                            # Confirmar exclusão
+                            if excluir_usuario(user['id'], user['usuario']):
+                                st.rerun()
+                else:
+                    st.markdown("🔒 **Protegido**")
+        
+        st.markdown("---")
+        st.info("""
+        **📝 Legenda:**
+        - 🟢 **Você**: Indica o usuário atualmente logado
+        - 🔒 **Protegido**: Usuário administrador principal que não pode ser excluído
+        - 🗑️ **Excluir**: Remove permanentemente o usuário do sistema
+        """)
     else:
         st.info("ℹ️ Nenhum usuário cadastrado.")

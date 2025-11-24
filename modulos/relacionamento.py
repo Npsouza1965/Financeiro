@@ -13,6 +13,9 @@ from datetime import date
 conn = sqlite3.connect(DB_FILE)
 
 def styled_subheader(text, font_size="14px", color="#171ae0"):
+    """
+    Exibe um subtítulo com fonte personalizada
+    """
     st.markdown(
         f"""
         <div style="
@@ -31,10 +34,140 @@ def styled_subheader(text, font_size="14px", color="#171ae0"):
         unsafe_allow_html=True
     )
 
+def aplicar_estilos_inputs():
+    """Aplica estilos para controlar a largura e altura dos inputs"""
+    st.markdown("""
+        <style>
+        /* CONTROLE GERAL DA LARGURA DOS INPUTS - CAMPOS EXPANSÍVEIS */
+        .stTextInput > div > div > input {
+            width: 100% !important;
+            min-width: 180px !important;
+            max-width: 100% !important;
+        }
+        
+        .stTextArea > div > div > textarea {
+            width: 100% !important;
+            min-width: 100% !important;
+            max-width: 100% !important;
+        }
+        
+        .stDateInput > div > div > input {
+            width: 100% !important;
+            min-width: 150px !important;
+            font-size: 14px !important;
+        }
+        
+        .stSelectbox > div > div > select {
+            width: 100% !important;
+            min-width: 150px !important;
+            font-size: 14px !important;
+        }
+        
+        /* ESPAÇAMENTO ENTRE CAMPOS - REDUZIDO */
+        .stTextInput, .stDateInput, .stSelectbox, .stTextArea {
+            margin-bottom: 5px !important;
+        }
+        
+        /* ALTURA DOS INPUTS - 40px */
+        .stTextInput > div > div > input {
+            height: 40px !important;
+            padding: 4px 8px !important;
+            font-size: 14px !important;
+        }
+        
+        .stTextArea > div > div > textarea {
+            min-height: 80px !important;
+            padding: 4px 8px !important;
+            font-size: 14px !important;
+        }
+        
+        .stDateInput > div > div > input {
+            height: 40px !important;
+            padding: 4px 8px !important;
+        }
+        
+        .stSelectbox > div > div > select {
+            height: 80px !important;
+            padding: 4px 8px !important;
+        }
+        
+        /* FOCO NOS INPUTS */
+        .stTextInput > div > div > input:focus {
+            border-color: #171ae0 !important;
+            box-shadow: 0 0 0 1px #171ae0 !important;
+        }
+        
+        /* CONTAINER DO FORMULÁRIO - MAIS COMPACTO */
+        .form-container {
+            background-color: #f8f9fa;
+            padding: 15px !important;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+            margin-bottom: 10px !important;
+        }
+        
+        /* CLASSES PARA LARGURAS ESPECÍFICAS - REMOVIDOS LIMITES MÁXIMOS */
+        .input-minimo .stTextInput > div > div > input {
+            min-width: 80px !important;
+            max-width: none !important;
+        }
+        
+        .input-pequeno .stTextInput > div > div > input {
+            min-width: 120px !important;
+            max-width: none !important;
+        }
+        
+        .input-medio .stTextInput > div > div > input {
+            min-width: 180px !important;
+            max-width: none !important;
+        }
+        
+        .input-grande .stTextInput > div > div > input {
+            min-width: 250px !important;
+            max-width: none !important;
+        }
+        
+        .input-full .stTextInput > div > div > input {
+            min-width: 100% !important;
+            max-width: 100% !important;
+        }
+        
+        /* BOTÕES COM MELHOR APARÊNCIA */
+        .stButton > button {
+            height: 32px !important;
+            font-weight: 500 !important;
+            font-size: 14px !important;
+        }
+        
+        /* LABELS MAIS COMPACTOS */
+        .stTextInput label, .stDateInput label, .stSelectbox label, .stTextArea label {
+            font-size: 14px !important;
+            margin-bottom: 2px !important;
+            font-weight: 500 !important;
+        }
+
+        /* ALINHAMENTO CORRETO DO BOTÃO BUSCAR CEP - SUPERIOR COM SUPERIOR */
+        .align-button-top {
+            display: flex;
+            align-items: flex-start !important;
+            justify-content: flex-start;
+            padding-top: 0 !important;
+            margin-top: 0 !important;
+            height: auto !important;
+        }
+        
+        .align-button-top button {
+            margin-top: 1.6rem !important;
+            align-self: flex-start !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
 # ----------------------------
 # Banco de dados
 # ----------------------------
 def criar_tabela():
+    """Cria a tabela se não existir"""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute("""
@@ -75,7 +208,7 @@ def converter_data_sql(data_str):
     if not data_str:
         return None
     try:
-        return datetime.strptime(data_str, "%Y-%m-%d").date()
+        return datetime.datetime.strptime(data_str, "%Y-%m-%d").date()
     except:
         return None
 
@@ -189,12 +322,15 @@ def carregar_registro_por_id(id_registro):
     return row
 
 # ----------------------------
-# Formulário principal
+# Formulário principal - COMPACTADO
 # ----------------------------
 def formulario_relacionamento():
+    # APLICAR ESTILOS DE LARGURA E ALTURA
+    aplicar_estilos_inputs()
+    
     st.markdown(
         """
-        <h1 style="font-size: 24px; color: #171ae0; margin-bottom: 30px;">
+        <h1 style="font-size: 26px; color: #171ae0; margin-bottom: 15px; text-align: center;">
             📋 Cadastro de Clientes e Fornecedores
         </h1>
         """,
@@ -226,8 +362,21 @@ def formulario_relacionamento():
     registros = listar_registros()
     opcoes_select = ["Novo registro"] + [f"{r[0]} - {r[3]} - {r[5]}" for r in registros]
     
-    # Combobox para seleção
-    selecao = st.selectbox("Selecionar registro para edição/exclusão", opcoes_select)
+    # Seção de seleção de registro
+    with st.container():
+        st.markdown('<div class="form-container">', unsafe_allow_html=True)
+        
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            selecao = st.selectbox("**Selecionar registro para edição/exclusão**", opcoes_select)
+        with col2:
+            # Botão alinhado no topo
+            st.markdown('<div class="align-button-top">', unsafe_allow_html=True)
+            if st.button("🔄 Atualizar Lista", use_container_width=True):
+                st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
+        
+        st.markdown('</div>', unsafe_allow_html=True)
     
     # Processar seleção do combobox
     if selecao != "Novo registro":
@@ -270,152 +419,189 @@ def formulario_relacionamento():
                 'obs': ''
             }
     
-    # Formulário
+    # FORMULÁRIO PRINCIPAL - MAIS COMPACTO
     with st.form("form_cadastro"):
-        styled_subheader("📝 Dados Básicos")
-        col1, col2 = st.columns(2)
+        st.markdown('<div class="form-container">', unsafe_allow_html=True)
+        
+        # SEÇÃO 1: DADOS BÁSICOS
+        styled_subheader("👤 Dados Básicos")
+        
+        col1, col2, col3 = st.columns(3)
         
         with col1:
             data_cad = st.date_input(
-                "Data de Cadastro *",
+                "Data de Cadastro",
                 value=st.session_state.form_data['data_cad'],
                 format="DD/MM/YYYY"
             )
         
         with col2:
             tipo = st.selectbox(
-                "Tipo *", 
+                "Tipo", 
                 ["Cliente", "Fornecedor"], 
                 index=0 if st.session_state.form_data['tipo'] == "Cliente" else 1
             )
         
-        nome = st.text_input(
-            "Nome Completo *", 
-            value=st.session_state.form_data['nome'],
-            placeholder="Digite o nome completo"
-        )
-
-        styled_subheader("📄 Documentos e Contato")
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
+        with col3:
             data_nas = st.date_input(
-                "Data de Nascimento",
+                "Data Nasc.",
                 value=st.session_state.form_data['data_nas'],
                 format="DD/MM/YYYY",
-                min_value=datetime.date(1900, 1, 1)  # ← ESTA linha restringe a data mínima
+                min_value=datetime.date(1900, 1, 1)
             )
-                
-        with col2:
+        
+        # NOME
+        nome = st.text_input(
+            "Nome Completo/Razão Social *", 
+            value=st.session_state.form_data['nome'],
+            placeholder="",
+            max_chars=200
+        )
+
+        # SEÇÃO 2: DOCUMENTOS
+        styled_subheader("📄 Documentos")
+        
+        col1, col2, col3 = st.columns([2, 1, 1])
+        
+        with col1:
             cnpj_cpf = st.text_input(
                 "CPF/CNPJ *", 
                 value=st.session_state.form_data['cnpj_cpf'],
-                placeholder="000.000.000-00 ou 00.000.000/0000-00",
-                key="cnpj_cpf_input"
+                placeholder="",
+                key="cnpj_cpf_input",
+                max_chars=18
             )
             
             # Validação em tempo real
             if cnpj_cpf:
-                # Remove caracteres não numéricos para validação
                 cnpj_cpf_limpo = ''.join(filter(str.isdigit, cnpj_cpf))
                 
                 if len(cnpj_cpf_limpo) == 11:
-                    # É CPF
                     if validar_cpf(cnpj_cpf_limpo):
                         st.success("✅ CPF válido")
                     else:
                         st.error("❌ CPF inválido")
                 elif len(cnpj_cpf_limpo) == 14:
-                    # É CNPJ
                     if validar_cnpj(cnpj_cpf_limpo):
                         st.success("✅ CNPJ válido")
                     else:
                         st.error("❌ CNPJ inválido")
                 else:
-                    st.warning("⚠️ Digite um CPF (11 dígitos) ou CNPJ (14 dígitos)")
-                
-        with col3:
+                    st.warning("⚠️ CPF (11) ou CNPJ (14) dígitos")
+        
+        with col2:
             cep = st.text_input(
                 "CEP", 
                 value=st.session_state.form_data['cep'],
-                placeholder="00000-000"
+                placeholder="00000-000",
+                max_chars=9
             )
-            if st.form_submit_button("Buscar CEP", use_container_width=True):
-                if cep:
-                    dados_cep = buscar_cep(cep)
-                    if dados_cep:
-                        st.session_state.form_data['endereco'] = dados_cep["endereco"]
-                        st.session_state.form_data['bairro'] = dados_cep["bairro"]
-                        st.session_state.form_data['cidade'] = dados_cep["cidade"]
-                        st.session_state.form_data['uf'] = dados_cep["uf"]
-                        st.rerun()
+        
+        with col3:
+            # Botão alinhado no TOPO com os campos
+            st.markdown('<div class="align-button-top">', unsafe_allow_html=True)
+            btn_buscar_cep = st.form_submit_button("🔍 Buscar CEP", use_container_width=True)
+            st.markdown('</div>', unsafe_allow_html=True)
 
+        # SEÇÃO 3: ENDEREÇO
         styled_subheader("🏠 Endereço")
+        
         endereco = st.text_input(
-            "Endereço", 
+            "Logradouro", 
             value=st.session_state.form_data['endereco'],
-            placeholder="Rua, Avenida, etc."
+            placeholder="",
+            max_chars=200
         )
         
         col1, col2, col3 = st.columns(3)
         with col1:
             bairro = st.text_input(
                 "Bairro", 
-                value=st.session_state.form_data['bairro']
+                value=st.session_state.form_data['bairro'],
+                placeholder="",
+                max_chars=50
             )
+            
         with col2:
             cidade = st.text_input(
                 "Cidade", 
-                value=st.session_state.form_data['cidade']
+                value=st.session_state.form_data['cidade'],
+                placeholder="",
+                max_chars=50
             )
+            
         with col3:
             uf = st.text_input(
                 "UF", 
                 value=st.session_state.form_data['uf'],
-                placeholder="SP, RJ, MG, etc.",
+                placeholder="",
                 max_chars=2
-            )
+            ).upper()
 
-        styled_subheader("📞 Contato")
+        # SEÇÃO 4: CONTATOS
+        styled_subheader("📞 Contatos")
+        
         col1, col2 = st.columns(2)
         
         with col1:
             telefone = st.text_input(
                 "Telefone", 
                 value=st.session_state.form_data['telefone'],
-                placeholder="(00) 00000-0000"
+                placeholder="",
+                max_chars=15
             )
         
         with col2:
             email = st.text_input(
-                "Email", 
+                "E-mail", 
                 value=st.session_state.form_data['email'],
-                placeholder="seu@email.com"
+                placeholder="",
+                max_chars=100
             )
 
+        # SEÇÃO 5: OBSERVAÇÕES
         styled_subheader("📋 Observações")
+        
         obs = st.text_area(
             "Observações", 
             value=st.session_state.form_data['obs'],
-            placeholder="Informações adicionais...",
-            height=100
+            placeholder="",
+            height=80,
+            max_chars=500
         )
 
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        # BOTÕES DE AÇÃO
         st.markdown("---")
         
-        # Botões
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
             btn_incluir = st.form_submit_button("💾 Incluir", use_container_width=True)
         with col2:
-            btn_alterar = st.form_submit_button("✏️ Alterar", use_container_width=True)
+            btn_alterar = st.form_submit_button("✏️ Alterar", use_container_width=True,
+                                              disabled=st.session_state.editando_id is None)
         with col3:
-            btn_excluir = st.form_submit_button("🗑️ Excluir", use_container_width=True)
+            btn_excluir = st.form_submit_button("🗑️ Excluir", use_container_width=True,
+                                              disabled=st.session_state.editando_id is None)
         with col4:
             btn_limpar = st.form_submit_button("🧹 Limpar", use_container_width=True)
     
-    # Processar ações
+    # PROCESSAR AÇÃO DO BOTÃO BUSCAR CEP (fora do form para evitar conflito)
+    if 'btn_buscar_cep' in locals() and btn_buscar_cep:
+        if cep:
+            dados_cep = buscar_cep(cep)
+            if dados_cep:
+                st.session_state.form_data['endereco'] = dados_cep["endereco"]
+                st.session_state.form_data['bairro'] = dados_cep["bairro"]
+                st.session_state.form_data['cidade'] = dados_cep["cidade"]
+                st.session_state.form_data['uf'] = dados_cep["uf"]
+                st.rerun()
+            else:
+                st.error("CEP não encontrado!")
+    
+    # PROCESSAR AÇÕES (código mantido igual)
     if btn_incluir:
         if not nome.strip() or not cnpj_cpf.strip():
             st.error("❌ Campos Nome e CPF/CNPJ são obrigatórios!")
@@ -437,7 +623,6 @@ def formulario_relacionamento():
             }
             
             if salvar_relacionamento(dados):
-                # Limpar formulário após salvar
                 st.session_state.editando_id = None
                 st.session_state.form_data = {
                     'data_cad': date.today(),
